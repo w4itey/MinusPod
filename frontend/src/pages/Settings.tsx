@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getSettings, updateSettings, resetSettings, resetPrompts, getModels, getWhisperModels, getSystemStatus, runCleanup, getProcessingEpisodes, cancelProcessing } from '../api/settings';
+import { getSettings, updateSettings, resetSettings, resetPrompts, getModels, getWhisperModels, getSystemStatus, runCleanup, getProcessingEpisodes, cancelProcessing, refreshModels } from '../api/settings';
 import { setPassword, removePassword } from '../api/auth';
 import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
-import type { ClaudeModel } from '../api/types';
+import CollapsibleSection from '../components/CollapsibleSection';
+import type { ClaudeModel, LlmProvider } from '../api/types';
+import { LLM_PROVIDERS } from '../api/types';
 
 function formatModelLabel(model: ClaudeModel): string {
   if (model.inputCostPerMtok != null && model.outputCostPerMtok != null) {
@@ -40,7 +42,9 @@ function Settings() {
   const [chaptersEnabled, setChaptersEnabled] = useState(true);
   const [chaptersModel, setChaptersModel] = useState('');
   const [minCutConfidence, setMinCutConfidence] = useState(0.80);
-  const [hasChanges, setHasChanges] = useState(false);
+  const [llmProvider, setLlmProvider] = useState<LlmProvider>(LLM_PROVIDERS.ANTHROPIC);
+  const [openaiBaseUrl, setOpenaiBaseUrl] = useState('http://localhost:8000/v1');
+  // hasChanges is derived via useMemo below
   const [cleanupConfirm, setCleanupConfirm] = useState(false);
 
   const { data: settings, isLoading: settingsLoading } = useQuery({
@@ -48,7 +52,7 @@ function Settings() {
     queryFn: getSettings,
   });
 
-  const { data: models } = useQuery({
+  const { data: models, isLoading: modelsLoading } = useQuery({
     queryKey: ['models'],
     queryFn: getModels,
   });
@@ -66,7 +70,7 @@ function Settings() {
   const { data: processingEpisodes } = useQuery({
     queryKey: ['processing-episodes'],
     queryFn: getProcessingEpisodes,
-    refetchInterval: 5000, // Poll every 5 seconds
+    refetchInterval: 5000,
   });
 
   const cancelMutation = useMutation({
@@ -91,26 +95,29 @@ function Settings() {
       setChaptersEnabled(settings.chaptersEnabled?.value ?? true);
       setChaptersModel(settings.chaptersModel?.value || '');
       setMinCutConfidence(settings.minCutConfidence?.value ?? 0.80);
+      setLlmProvider((settings.llmProvider?.value || LLM_PROVIDERS.ANTHROPIC) as LlmProvider);
+      setOpenaiBaseUrl(settings.openaiBaseUrl?.value || 'http://localhost:8000/v1');
     }
   }, [settings]);
 
-  useEffect(() => {
-    if (settings) {
-      const changed =
-        systemPrompt !== (settings.systemPrompt?.value || '') ||
-        verificationPrompt !== (settings.verificationPrompt?.value || '') ||
-        selectedModel !== (settings.claudeModel?.value || '') ||
-        verificationModel !== (settings.verificationModel?.value || '') ||
-        whisperModel !== (settings.whisperModel?.value || 'small') ||
-        autoProcessEnabled !== (settings.autoProcessEnabled?.value ?? true) ||
-        audioBitrate !== (settings.audioBitrate?.value || '128k') ||
-        vttTranscriptsEnabled !== (settings.vttTranscriptsEnabled?.value ?? true) ||
-        chaptersEnabled !== (settings.chaptersEnabled?.value ?? true) ||
-        chaptersModel !== (settings.chaptersModel?.value || '') ||
-        minCutConfidence !== (settings.minCutConfidence?.value ?? 0.80);
-      setHasChanges(changed);
-    }
-  }, [systemPrompt, verificationPrompt, selectedModel, verificationModel, whisperModel, autoProcessEnabled, audioBitrate, vttTranscriptsEnabled, chaptersEnabled, chaptersModel, minCutConfidence, settings]);
+  const hasChanges = useMemo(() => {
+    if (!settings) return false;
+    return (
+      systemPrompt !== (settings.systemPrompt?.value || '') ||
+      verificationPrompt !== (settings.verificationPrompt?.value || '') ||
+      selectedModel !== (settings.claudeModel?.value || '') ||
+      verificationModel !== (settings.verificationModel?.value || '') ||
+      whisperModel !== (settings.whisperModel?.value || 'small') ||
+      autoProcessEnabled !== (settings.autoProcessEnabled?.value ?? true) ||
+      audioBitrate !== (settings.audioBitrate?.value || '128k') ||
+      vttTranscriptsEnabled !== (settings.vttTranscriptsEnabled?.value ?? true) ||
+      chaptersEnabled !== (settings.chaptersEnabled?.value ?? true) ||
+      chaptersModel !== (settings.chaptersModel?.value || '') ||
+      minCutConfidence !== (settings.minCutConfidence?.value ?? 0.80) ||
+      llmProvider !== (settings.llmProvider?.value || LLM_PROVIDERS.ANTHROPIC) ||
+      openaiBaseUrl !== (settings.openaiBaseUrl?.value || 'http://localhost:8000/v1')
+    );
+  }, [systemPrompt, verificationPrompt, selectedModel, verificationModel, whisperModel, autoProcessEnabled, audioBitrate, vttTranscriptsEnabled, chaptersEnabled, chaptersModel, minCutConfidence, llmProvider, openaiBaseUrl, settings]);
 
   const updateMutation = useMutation({
     mutationFn: () =>
@@ -126,10 +133,19 @@ function Settings() {
         chaptersEnabled,
         chaptersModel,
         minCutConfidence,
+        llmProvider,
+        openaiBaseUrl,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['settings'] });
-      setHasChanges(false);
+      queryClient.invalidateQueries({ queryKey: ['models'] });
+    },
+  });
+
+  const refreshModelsMutation = useMutation({
+    mutationFn: refreshModels,
+    onSuccess: (data) => {
+      queryClient.setQueryData(['models'], data.models);
     },
   });
 
@@ -137,6 +153,7 @@ function Settings() {
     mutationFn: resetSettings,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['settings'] });
+      queryClient.invalidateQueries({ queryKey: ['models'] });
     },
   });
 
@@ -240,7 +257,7 @@ function Settings() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-8">
+    <div className="max-w-3xl mx-auto space-y-4 pb-20">
       <div className="flex justify-between items-start">
         <div>
           <h1 className="text-2xl font-bold text-foreground mb-2">Settings</h1>
@@ -257,12 +274,12 @@ function Settings() {
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
-          API Documentation
+          API Docs
         </a>
       </div>
 
-      <div className="bg-card rounded-lg border border-border p-6">
-        <h2 className="text-lg font-semibold text-foreground mb-4">System Status</h2>
+      {/* 1. System Status */}
+      <CollapsibleSection title="System Status" defaultOpen>
         {statusLoading ? (
           <LoadingSpinner size="sm" />
         ) : status ? (
@@ -332,17 +349,14 @@ function Settings() {
             </span>
           )}
         </div>
-      </div>
+      </CollapsibleSection>
 
-      {/* Security Section */}
-      <div className="bg-card rounded-lg border border-border p-6">
-        <div className="flex justify-between items-start mb-4">
-          <div>
-            <h2 className="text-lg font-semibold text-foreground">Security</h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              {isPasswordSet ? 'Password protection is enabled' : 'No password set - app is publicly accessible'}
-            </p>
-          </div>
+      {/* 2. Security */}
+      <CollapsibleSection
+        title="Security"
+        subtitle={isPasswordSet ? 'Password protection is enabled' : 'No password set - app is publicly accessible'}
+      >
+        <div className="flex justify-end mb-4">
           {isPasswordSet && (
             <button
               onClick={handleLogout}
@@ -370,6 +384,7 @@ function Settings() {
               <input
                 type="password"
                 id="currentPassword"
+                autoComplete="current-password"
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
                 required
@@ -385,6 +400,7 @@ function Settings() {
             <input
               type="password"
               id="newPassword"
+              autoComplete="new-password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               placeholder={isPasswordSet ? 'Leave empty to remove password' : 'Minimum 8 characters'}
@@ -399,6 +415,7 @@ function Settings() {
             <input
               type="password"
               id="confirmPassword"
+              autoComplete="new-password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
@@ -431,10 +448,10 @@ function Settings() {
               : 'Set Password'}
           </button>
         </form>
-      </div>
+      </CollapsibleSection>
 
-      <div className="bg-card rounded-lg border border-border p-6">
-        <h2 className="text-lg font-semibold text-foreground mb-4">Processing Queue</h2>
+      {/* 3. Processing Queue */}
+      <CollapsibleSection title="Processing Queue">
         {processingEpisodes && processingEpisodes.length > 0 ? (
           <div className="space-y-2">
             {processingEpisodes.map((episode) => (
@@ -459,13 +476,180 @@ function Settings() {
         ) : (
           <p className="text-sm text-muted-foreground">No episodes currently processing</p>
         )}
-      </div>
+      </CollapsibleSection>
 
-      <div className="bg-card rounded-lg border border-border p-6">
-        <h2 className="text-lg font-semibold text-foreground mb-4">Whisper Model</h2>
+      {/* 4. LLM Provider */}
+      <CollapsibleSection title="LLM Provider" defaultOpen>
+        <div className="space-y-4">
+          <div>
+            <label htmlFor="llmProvider" className="block text-sm font-medium text-foreground mb-2">
+              Provider
+            </label>
+            <select
+              id="llmProvider"
+              value={llmProvider}
+              onChange={(e) => setLlmProvider(e.target.value as LlmProvider)}
+              className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value={LLM_PROVIDERS.ANTHROPIC}>Anthropic</option>
+              <option value={LLM_PROVIDERS.OPENAI_COMPATIBLE}>OpenAI Compatible</option>
+              <option value={LLM_PROVIDERS.OLLAMA}>Ollama</option>
+            </select>
+          </div>
+
+          {llmProvider !== LLM_PROVIDERS.ANTHROPIC && (
+            <div>
+              <label htmlFor="openaiBaseUrl" className="block text-sm font-medium text-foreground mb-2">
+                Base URL
+              </label>
+              <input
+                type="text"
+                id="openaiBaseUrl"
+                value={openaiBaseUrl}
+                onChange={(e) => setOpenaiBaseUrl(e.target.value)}
+                placeholder="http://localhost:11434/v1"
+                className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring font-mono text-sm"
+              />
+              <p className="mt-1 text-sm text-muted-foreground">
+                {llmProvider === LLM_PROVIDERS.OLLAMA
+                  ? 'Ollama server URL (e.g. http://localhost:11434)'
+                  : 'OpenAI-compatible API endpoint (must end with /v1)'}
+              </p>
+            </div>
+          )}
+
+          <div>
+            <p className="text-sm font-medium text-foreground mb-1">API Key Status</p>
+            {settings?.apiKeyConfigured ? (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-500/10 text-green-600 dark:text-green-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                Configured (env)
+              </span>
+            ) : llmProvider === LLM_PROVIDERS.ANTHROPIC ? (
+              <>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-yellow-500/10 text-yellow-600 dark:text-yellow-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-yellow-500" />
+                  Not configured
+                </span>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Set ANTHROPIC_API_KEY environment variable to enable Anthropic API access
+                </p>
+              </>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground">
+                <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50" />
+                Not required
+              </span>
+            )}
+          </div>
+        </div>
+      </CollapsibleSection>
+
+      {/* 5. AI Models */}
+      <CollapsibleSection
+        title="AI Models"
+        headerRight={
+          <button
+            onClick={() => refreshModelsMutation.mutate()}
+            disabled={refreshModelsMutation.isPending}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs rounded bg-secondary text-secondary-foreground hover:bg-secondary/80 disabled:opacity-50 transition-colors"
+            title="Refresh model list from provider"
+          >
+            {refreshModelsMutation.isPending ? (
+              <>
+                <LoadingSpinner inline className="w-3.5 h-3.5" />
+                Refreshing...
+              </>
+            ) : (
+              <>
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Refresh
+              </>
+            )}
+          </button>
+        }
+      >
+        {!modelsLoading && models && models.length === 0 && (
+          <div className="mb-4 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+            <p className="text-sm text-yellow-600 dark:text-yellow-400">
+              No models available from the LLM provider. Check that your provider is configured correctly and the endpoint is reachable.
+            </p>
+          </div>
+        )}
+
+        <div className="space-y-4">
+          <div>
+            <label htmlFor="model" className="block text-sm font-medium text-foreground mb-2">
+              Ad Detection Model
+            </label>
+            <select
+              id="model"
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              {models?.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {formatModelLabel(model)}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Primary model for analyzing transcripts and detecting ads
+            </p>
+          </div>
+
+          <div>
+            <label htmlFor="verificationModel" className="block text-sm font-medium text-foreground mb-2">
+              Verification Model
+            </label>
+            <select
+              id="verificationModel"
+              value={verificationModel}
+              onChange={(e) => setVerificationModel(e.target.value)}
+              className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              {models?.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {formatModelLabel(model)}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Re-runs detection on processed audio to catch missed ads (can differ for cost optimization)
+            </p>
+          </div>
+
+          <div>
+            <label htmlFor="chaptersModel" className="block text-sm font-medium text-foreground mb-2">
+              Chapters Model
+            </label>
+            <select
+              id="chaptersModel"
+              value={chaptersModel}
+              onChange={(e) => setChaptersModel(e.target.value)}
+              className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              {models?.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {formatModelLabel(model)}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Chapter title generation and topic detection (smaller/cheaper models work well)
+            </p>
+          </div>
+        </div>
+      </CollapsibleSection>
+
+      {/* 6. Transcription */}
+      <CollapsibleSection title="Transcription">
         <div>
           <label htmlFor="whisperModel" className="block text-sm font-medium text-foreground mb-2">
-            Model for Transcription
+            Whisper Model
           </label>
           <select
             id="whisperModel"
@@ -488,144 +672,93 @@ function Settings() {
             </div>
           )}
         </div>
-      </div>
+      </CollapsibleSection>
 
-      <div className="bg-card rounded-lg border border-border p-6">
-        <h2 className="text-lg font-semibold text-foreground mb-4">Audio Output Quality</h2>
-        <div>
-          <label htmlFor="audioBitrate" className="block text-sm font-medium text-foreground mb-2">
-            Output Bitrate
-          </label>
-          <select
-            id="audioBitrate"
-            value={audioBitrate}
-            onChange={(e) => setAudioBitrate(e.target.value)}
-            className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-          >
-            <option value="64k">64 kbps - Smallest file size</option>
-            <option value="96k">96 kbps - Good for speech</option>
-            <option value="128k">128 kbps - Standard quality (recommended)</option>
-            <option value="192k">192 kbps - High quality</option>
-            <option value="256k">256 kbps - Maximum quality</option>
-          </select>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Higher bitrates produce better audio quality but larger file sizes
-          </p>
-        </div>
-      </div>
-
-      <div className="bg-card rounded-lg border border-border p-6">
-        <h2 className="text-lg font-semibold text-foreground mb-4">Audio Analysis</h2>
-        <p className="text-sm text-muted-foreground">
-          Volume and transition analysis runs automatically on every episode. Detects volume anomalies and abrupt loudness transitions that indicate dynamically inserted ads. Audio signals are included as context in the AI detection prompt.
-        </p>
-      </div>
-
-      <div className="bg-card rounded-lg border border-border p-6">
-        <h2 className="text-lg font-semibold text-foreground mb-4">Ad Detection Aggressiveness</h2>
-        <div>
-          <label htmlFor="minCutConfidence" className="block text-sm font-medium text-foreground mb-2">
-            Minimum Confidence Threshold: {Math.round(minCutConfidence * 100)}%
-          </label>
-          <input
-            type="range"
-            id="minCutConfidence"
-            min="0.50"
-            max="0.95"
-            step="0.05"
-            value={minCutConfidence}
-            onChange={(e) => setMinCutConfidence(parseFloat(e.target.value))}
-            className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
-          />
-          <div className="flex justify-between text-xs text-muted-foreground mt-1">
-            <span>More Aggressive (50%)</span>
-            <span>More Conservative (95%)</span>
-          </div>
-          <p className="mt-3 text-sm text-muted-foreground">
-            Controls how confident the system must be before removing an ad.
-            Lower values remove more potential ads but may include false positives.
-            Higher values are safer but may miss some ads.
-          </p>
-        </div>
-      </div>
-
-      <div className="bg-card rounded-lg border border-border p-6">
-        <h2 className="text-lg font-semibold text-foreground mb-4">Auto-Process New Episodes</h2>
-        <div>
-          <label className="flex items-center gap-3 cursor-pointer">
-            <div
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                autoProcessEnabled ? 'bg-primary' : 'bg-secondary'
-              }`}
-              onClick={() => setAutoProcessEnabled(!autoProcessEnabled)}
+      {/* 7. Audio */}
+      <CollapsibleSection title="Audio">
+        <div className="space-y-4">
+          <div>
+            <label htmlFor="audioBitrate" className="block text-sm font-medium text-foreground mb-2">
+              Output Bitrate
+            </label>
+            <select
+              id="audioBitrate"
+              value={audioBitrate}
+              onChange={(e) => setAudioBitrate(e.target.value)}
+              className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  autoProcessEnabled ? 'translate-x-6' : 'translate-x-1'
-                }`}
-              />
+              <option value="64k">64 kbps - Smallest file size</option>
+              <option value="96k">96 kbps - Good for speech</option>
+              <option value="128k">128 kbps - Standard quality (recommended)</option>
+              <option value="192k">192 kbps - High quality</option>
+              <option value="256k">256 kbps - Maximum quality</option>
+            </select>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Higher bitrates produce better audio quality but larger file sizes
+            </p>
+          </div>
+
+          <div className="pt-3 border-t border-border">
+            <h3 className="text-sm font-medium text-foreground mb-1">Audio Analysis</h3>
+            <p className="text-sm text-muted-foreground">
+              Volume and transition analysis runs automatically on every episode. Detects volume anomalies and abrupt loudness transitions that indicate dynamically inserted ads. Audio signals are included as context in the AI detection prompt.
+            </p>
+          </div>
+        </div>
+      </CollapsibleSection>
+
+      {/* 8. Ad Detection */}
+      <CollapsibleSection title="Ad Detection">
+        <div className="space-y-6">
+          <div>
+            <label htmlFor="minCutConfidence" className="block text-sm font-medium text-foreground mb-2">
+              Minimum Confidence Threshold: {Math.round(minCutConfidence * 100)}%
+            </label>
+            <input
+              type="range"
+              id="minCutConfidence"
+              min="0.50"
+              max="0.95"
+              step="0.05"
+              value={minCutConfidence}
+              onChange={(e) => setMinCutConfidence(parseFloat(e.target.value))}
+              className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+            />
+            <div className="flex justify-between text-xs text-muted-foreground mt-1">
+              <span>More Aggressive (50%)</span>
+              <span>More Conservative (95%)</span>
             </div>
-            <span className="text-sm font-medium text-foreground">Enable Auto-Processing</span>
-          </label>
-          <p className="mt-2 text-sm text-muted-foreground ml-14">
-            Automatically download and process new episodes when feeds are refreshed. Individual podcasts can override this setting.
-          </p>
-        </div>
-      </div>
+            <p className="mt-3 text-sm text-muted-foreground">
+              Controls how confident the system must be before removing an ad.
+              Lower values remove more potential ads but may include false positives.
+            </p>
+          </div>
 
-      <div className="bg-card rounded-lg border border-border p-6">
-        <h2 className="text-lg font-semibold text-foreground mb-4">AI Model</h2>
-        <div>
-          <label htmlFor="model" className="block text-sm font-medium text-foreground mb-2">
-            Model for Ad Detection
-          </label>
-          <select
-            id="model"
-            value={selectedModel}
-            onChange={(e) => setSelectedModel(e.target.value)}
-            className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-          >
-            {models?.map((model) => (
-              <option key={model.id} value={model.id}>
-                {formatModelLabel(model)}
-              </option>
-            ))}
-          </select>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Select which AI model to use for analyzing transcripts
-          </p>
+          <div className="pt-3 border-t border-border">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <div
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  autoProcessEnabled ? 'bg-primary' : 'bg-secondary'
+                }`}
+                onClick={() => setAutoProcessEnabled(!autoProcessEnabled)}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    autoProcessEnabled ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </div>
+              <span className="text-sm font-medium text-foreground">Auto-Process New Episodes</span>
+            </label>
+            <p className="mt-2 text-sm text-muted-foreground ml-14">
+              Automatically download and process new episodes when feeds are refreshed. Individual podcasts can override this setting.
+            </p>
+          </div>
         </div>
-      </div>
+      </CollapsibleSection>
 
-      <div className="bg-card rounded-lg border border-border p-6">
-        <h2 className="text-lg font-semibold text-foreground mb-4">Verification Pass</h2>
-        <p className="text-sm text-muted-foreground mb-4">
-          After the first pass removes detected ads, the verification pass re-transcribes the processed audio and runs detection again to catch any missed ads.
-        </p>
-        <div>
-          <label htmlFor="verificationModel" className="block text-sm font-medium text-foreground mb-2">
-            Verification Model
-          </label>
-          <select
-            id="verificationModel"
-            value={verificationModel}
-            onChange={(e) => setVerificationModel(e.target.value)}
-            className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-          >
-            {models?.map((model) => (
-              <option key={model.id} value={model.id}>
-                {formatModelLabel(model)}
-              </option>
-            ))}
-          </select>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Model for verification detection (can differ from first pass for cost optimization)
-          </p>
-        </div>
-      </div>
-
-      <div className="bg-card rounded-lg border border-border p-6">
-        <h2 className="text-lg font-semibold text-foreground mb-4">Podcasting 2.0</h2>
+      {/* 9. Podcasting 2.0 */}
+      <CollapsibleSection title="Podcasting 2.0">
         <div className="space-y-4">
           <div>
             <label className="flex items-center gap-3 cursor-pointer">
@@ -668,97 +801,82 @@ function Settings() {
               Create JSON chapters from ad boundaries and description timestamps
             </p>
           </div>
-
-          {chaptersEnabled && (
-            <div className="ml-14">
-              <label htmlFor="chaptersModel" className="block text-sm font-medium text-foreground mb-2">
-                Chapters Model
-              </label>
-              <select
-                id="chaptersModel"
-                value={chaptersModel}
-                onChange={(e) => setChaptersModel(e.target.value)}
-                className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              >
-                {models?.map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {formatModelLabel(model)}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Model for chapter title generation and topic detection (smaller/cheaper models work well)
-              </p>
-            </div>
-          )}
         </div>
-      </div>
+      </CollapsibleSection>
 
-      <div className="bg-card rounded-lg border border-border p-6">
-        <h2 className="text-lg font-semibold text-foreground mb-4">Ad Detection Prompt</h2>
-
-        <div>
-          <label htmlFor="systemPrompt" className="block text-sm font-medium text-foreground mb-2">
-            First Pass System Prompt
-          </label>
-          <textarea
-            id="systemPrompt"
-            value={systemPrompt}
-            onChange={(e) => setSystemPrompt(e.target.value)}
-            rows={12}
-            className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring font-mono text-sm"
-          />
-          <p className="mt-1 text-sm text-muted-foreground">
-            Instructions sent to the AI model for the initial ad detection pass
-          </p>
-        </div>
-
-        <div className="mt-6">
-          <label htmlFor="verificationPrompt" className="block text-sm font-medium text-foreground mb-2">
-            Verification Prompt
-          </label>
-          <textarea
-            id="verificationPrompt"
-            value={verificationPrompt}
-            onChange={(e) => setVerificationPrompt(e.target.value)}
-            rows={12}
-            className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring font-mono text-sm"
-          />
-          <p className="mt-1 text-sm text-muted-foreground">
-            Instructions for the verification pass to detect ads missed by the first pass on the processed audio
-          </p>
-        </div>
-
-        {(updateMutation.error || resetMutation.error || resetPromptsMutation.error) && (
-          <div className="mt-4 p-4 rounded-lg bg-destructive/10 text-destructive">
-            {((updateMutation.error || resetMutation.error || resetPromptsMutation.error) as Error).message}
+      {/* 10. Prompts */}
+      <CollapsibleSection title="Prompts">
+        <div className="space-y-6">
+          <div>
+            <label htmlFor="systemPrompt" className="block text-sm font-medium text-foreground mb-2">
+              First Pass System Prompt
+            </label>
+            <textarea
+              id="systemPrompt"
+              value={systemPrompt}
+              onChange={(e) => setSystemPrompt(e.target.value)}
+              rows={6}
+              className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring font-mono text-sm sm:rows-12"
+            />
+            <p className="mt-1 text-sm text-muted-foreground">
+              Instructions sent to the AI model for the initial ad detection pass
+            </p>
           </div>
-        )}
 
-        <div className="mt-6 flex flex-wrap gap-4">
-          <button
-            onClick={() => updateMutation.mutate()}
-            disabled={updateMutation.isPending || !hasChanges}
-            className="px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
-          >
-            {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
-          </button>
+          <div>
+            <label htmlFor="verificationPrompt" className="block text-sm font-medium text-foreground mb-2">
+              Verification Prompt
+            </label>
+            <textarea
+              id="verificationPrompt"
+              value={verificationPrompt}
+              onChange={(e) => setVerificationPrompt(e.target.value)}
+              rows={6}
+              className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring font-mono text-sm sm:rows-12"
+            />
+            <p className="mt-1 text-sm text-muted-foreground">
+              Instructions for the verification pass to detect ads missed by the first pass
+            </p>
+          </div>
+
           <button
             onClick={() => resetPromptsMutation.mutate()}
             disabled={resetPromptsMutation.isPending}
             className="px-4 py-2 rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 disabled:opacity-50 transition-colors"
           >
-            {resetPromptsMutation.isPending ? 'Resetting...' : 'Reset Prompts Only'}
-          </button>
-          <button
-            onClick={() => resetMutation.mutate()}
-            disabled={resetMutation.isPending}
-            className="px-4 py-2 rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 disabled:opacity-50 transition-colors"
-          >
-            {resetMutation.isPending ? 'Resetting...' : 'Reset All Settings'}
+            {resetPromptsMutation.isPending ? 'Resetting...' : 'Reset Prompts to Default'}
           </button>
         </div>
-      </div>
+      </CollapsibleSection>
+
+      {/* Error display */}
+      {(updateMutation.error || resetMutation.error || resetPromptsMutation.error) && (
+        <div className="p-4 rounded-lg bg-destructive/10 text-destructive">
+          {((updateMutation.error || resetMutation.error || resetPromptsMutation.error) as Error).message}
+        </div>
+      )}
+
+      {/* Sticky save bar */}
+      {hasChanges && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-background/80 backdrop-blur-md">
+          <div className="max-w-3xl mx-auto flex items-center justify-between gap-4 px-4 py-3">
+            <button
+              onClick={() => resetMutation.mutate()}
+              disabled={resetMutation.isPending}
+              className="px-4 py-2 rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 disabled:opacity-50 transition-colors text-sm"
+            >
+              {resetMutation.isPending ? 'Resetting...' : 'Reset All'}
+            </button>
+            <button
+              onClick={() => updateMutation.mutate()}
+              disabled={updateMutation.isPending}
+              className="px-6 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors text-sm font-medium"
+            >
+              {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -161,7 +161,7 @@ Audio analysis runs automatically on every episode (lightweight, uses only ffmpe
 ## Requirements
 
 - Docker with NVIDIA GPU support (for Whisper)
-- Anthropic API key
+- Anthropic API key **or** [Ollama](https://ollama.com) for local inference
 
 ### Memory Requirements
 
@@ -211,7 +211,7 @@ The server includes a web-based management UI at `/ui/`:
 - **Feed Management** - Refresh, delete, copy feed URLs, set network override
 - **Patterns** - View and manage cross-episode ad patterns with sponsor names
 - **History** - View processing history with stats, filtering, and export
-- **Settings** - Configure ad detection prompts, Claude model, view system statistics, LLM token usage and cost, and run cleanup
+- **Settings** - Configure LLM provider (Anthropic/Ollama/OpenAI-compatible), AI models, ad detection prompts, view system statistics, LLM token usage and cost, and run cleanup
 - **Real-Time Status Bar** - Shows current processing progress across all pages
 
 ### Ad Editor (Mobile-First)
@@ -296,6 +296,7 @@ All configuration is managed through the web UI or REST API. No config files nee
 ### Ad Detection Settings
 
 Customize ad detection in Settings:
+- **LLM Provider** - Switch between Anthropic (direct API), Ollama (local), or OpenAI-compatible endpoints at runtime without restarting the container
 - **AI Model** - Model for first pass ad detection
 - **Verification Model** - Separate model for the post-cut verification pass
 - **Chapters Model** - Model for chapter generation (defaults to Haiku for cost efficiency)
@@ -326,7 +327,7 @@ The feed URL is shown in the web UI and can be copied to clipboard.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ANTHROPIC_API_KEY` | required | Claude API key (required for default Anthropic provider) |
+| `ANTHROPIC_API_KEY` | _(none)_ | Claude API key (required when `LLM_PROVIDER=anthropic`, not needed for Ollama) |
 | `LLM_PROVIDER` | `anthropic` | LLM backend: `anthropic` (direct API), `openai-compatible` (wrapper), or `ollama` |
 | `OPENAI_BASE_URL` | `http://localhost:8000/v1` | Base URL for OpenAI-compatible API (only used with non-anthropic providers) |
 | `OPENAI_API_KEY` | `not-needed` | API key for OpenAI-compatible endpoint (not required for Ollama or local wrappers) |
@@ -518,8 +519,10 @@ Key endpoints:
 - `GET /api/v1/status/stream` - SSE endpoint for real-time status updates
 - `GET /api/v1/system/token-usage` - LLM token usage and cost breakdown by model
 - `GET /api/v1/system/model-pricing` - All known LLM model pricing rates
-- `GET /api/v1/settings` - Get current settings
-- `PUT /api/v1/settings/ad-detection` - Update ad detection config
+- `GET /api/v1/settings` - Get current settings (includes LLM provider, API key status)
+- `PUT /api/v1/settings/ad-detection` - Update ad detection config (model, provider, prompts)
+- `GET /api/v1/settings/models` - List available AI models from current provider
+- `POST /api/v1/settings/models/refresh` - Force refresh model list from provider
 
 ## Remote Access
 

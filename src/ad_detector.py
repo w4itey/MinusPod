@@ -6,9 +6,10 @@ import time
 import random
 from typing import List, Dict, Optional
 from llm_client import (
-    get_llm_client, get_api_key, LLMClient, FALLBACK_MODELS,
+    get_llm_client, get_api_key, LLMClient,
     is_retryable_error, is_rate_limit_error,
-    get_llm_timeout, get_llm_max_retries
+    get_llm_timeout, get_llm_max_retries,
+    get_effective_provider, model_matches_provider
 )
 from utils.time import parse_timestamp, first_not_none
 
@@ -1088,10 +1089,8 @@ class AdDetector:
             ]
             return self._ensure_configured_models_present(model_list)
         except Exception as e:
-            logger.warning(f"Could not fetch models from API: {e}")
-            return [
-                {'id': m.id, 'name': m.name} for m in FALLBACK_MODELS
-            ]
+            logger.error(f"Could not fetch models from API: {e}")
+            return []
 
     def _ensure_configured_models_present(self, models_list: List[Dict]) -> List[Dict]:
         """Ensure currently-configured models always appear in the model list.
@@ -1099,6 +1098,10 @@ class AdDetector:
         If the API/wrapper doesn't advertise a model that's actively configured
         (e.g., set as first pass or verification model), inject it so the settings UI
         shows it and doesn't lose the selection.
+
+        Only injects models that plausibly belong to the current provider to avoid
+        stale model IDs from a previous provider polluting the dropdown (e.g.
+        claude-* models lingering after switching to Ollama).
         """
         existing_ids = {m['id'] for m in models_list}
         configured_models = []
@@ -1108,8 +1111,16 @@ class AdDetector:
         except Exception:
             pass
 
+        provider = get_effective_provider()
+
         for model_id in configured_models:
             if model_id and model_id not in existing_ids:
+                if not model_matches_provider(model_id, provider):
+                    logger.debug(
+                        f"Skipping configured model '{model_id}' -- "
+                        f"does not match current provider '{provider}'"
+                    )
+                    continue
                 logger.info(f"Added configured model '{model_id}' to model list")
                 models_list.insert(0, {
                     'id': model_id,

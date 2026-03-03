@@ -35,8 +35,9 @@ def get_chapters_model() -> str:
 
         # Provider-aware fallback: use the primary detection model for non-Anthropic providers
         # (Ollama doesn't have Anthropic model names like claude-haiku-4-5-20251001)
-        provider = os.environ.get('LLM_PROVIDER', 'anthropic').lower()
-        if provider != 'anthropic':
+        from llm_client import get_effective_provider, PROVIDER_ANTHROPIC
+        provider = get_effective_provider()
+        if provider != PROVIDER_ANTHROPIC:
             primary_model = db.get_setting('claude_model')
             if primary_model:
                 return primary_model

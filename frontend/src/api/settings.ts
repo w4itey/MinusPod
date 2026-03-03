@@ -34,6 +34,12 @@ export async function getWhisperModels(): Promise<WhisperModel[]> {
   return response.models;
 }
 
+export async function refreshModels(): Promise<{ models: ClaudeModel[]; count: number }> {
+  return apiRequest<{ models: ClaudeModel[]; count: number }>('/settings/models/refresh', {
+    method: 'POST',
+  });
+}
+
 export async function getSystemStatus(): Promise<SystemStatus> {
   return apiRequest<SystemStatus>('/system/status');
 }

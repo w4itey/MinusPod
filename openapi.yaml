@@ -12,7 +12,7 @@ info:
     - Monitor system status and trigger cleanup operations
     - Manage cross-episode ad patterns with network and podcast scope
     - Submit corrections to improve ad detection accuracy
-  version: 1.0.33
+  version: 1.0.35
   contact:
     name: MinusPod
   license:
@@ -2072,6 +2072,15 @@ paths:
                   maximum: 0.95
                   description: Minimum confidence threshold to cut an ad from audio. Lower = more aggressive (removes more potential ads), higher = more conservative
                   example: 0.80
+                llmProvider:
+                  type: string
+                  description: LLM provider to use (anthropic, openai-compatible, ollama)
+                  enum: [anthropic, openai-compatible, ollama]
+                  example: anthropic
+                openaiBaseUrl:
+                  type: string
+                  description: Base URL for OpenAI-compatible API endpoint (only used when provider is not anthropic)
+                  example: http://localhost:11434/v1
       responses:
         '200':
           description: Settings updated
@@ -2090,7 +2099,7 @@ paths:
       tags:
         - Settings
       summary: Reset ad detection settings
-      description: Reset all ad detection settings to their default values
+      description: Reset all ad detection settings to their default values, including LLM provider and base URL (reverts to environment variable defaults)
       operationId: resetAdDetectionSettings
       responses:
         '200':
@@ -2140,6 +2149,29 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/Model'
+
+  /settings/models/refresh:
+    post:
+      tags:
+        - Settings
+      summary: Refresh available AI models
+      description: Force refresh the model list from the current LLM provider. Recreates the LLM client and fetches a fresh model list.
+      operationId: refreshModels
+      responses:
+        '200':
+          description: Refreshed model list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  models:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Model'
+                  count:
+                    type: integer
+                    description: Number of models available
 
   /settings/whisper-models:
     get:
@@ -2715,6 +2747,25 @@ components:
               description: Minimum confidence threshold to cut an ad from audio (0.50-0.95)
             isDefault:
               type: boolean
+        llmProvider:
+          type: object
+          properties:
+            value:
+              type: string
+              description: Active LLM provider (anthropic, openai-compatible, ollama)
+            isDefault:
+              type: boolean
+        openaiBaseUrl:
+          type: object
+          properties:
+            value:
+              type: string
+              description: Base URL for OpenAI-compatible API endpoint
+            isDefault:
+              type: boolean
+        apiKeyConfigured:
+          type: boolean
+          description: Whether an API key is configured for the current provider (read-only)
         retentionPeriodMinutes:
           type: integer
         defaults:
@@ -2737,6 +2788,10 @@ components:
             minCutConfidence:
               type: number
               format: float
+            llmProvider:
+              type: string
+            openaiBaseUrl:
+              type: string
 
     SystemStatus:
       type: object

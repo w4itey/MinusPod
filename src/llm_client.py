@@ -19,11 +19,34 @@ Configuration via environment variables:
 import logging
 import os
 import threading
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import List, Dict, Optional, Any
 
 logger = logging.getLogger(__name__)
+io_logger = logging.getLogger('podcast.llm_io')
+
+
+def _log_content(label: str, content: str, max_length: int = 2000):
+    """Log LLM content at DEBUG level with intelligent truncation.
+
+    Shows head (80%) + tail (20%) for content exceeding max_length.
+    """
+    if not io_logger.isEnabledFor(logging.DEBUG):
+        return
+    if len(content) <= max_length:
+        io_logger.debug(f"{label} ({len(content)} chars):\n{content}")
+    else:
+        head_len = int(max_length * 0.8)
+        tail_len = max_length - head_len
+        io_logger.debug(
+            f"{label} ({len(content)} chars, truncated):\n"
+            f"{content[:head_len]}\n"
+            f"... [{len(content) - max_length} chars omitted] ...\n"
+            f"{content[-tail_len:]}"
+        )
+
 
 # Re-export error classes for backward compatibility
 # These will be imported from here instead of directly from anthropic
@@ -56,17 +79,69 @@ class LLMModel:
     created: Optional[str] = None
 
 
-# Known Claude models used as fallback when the API model list is unavailable.
-# Defined once here to avoid duplication across client implementations.
-FALLBACK_MODELS = [
-    LLMModel(id='claude-opus-4-6', name='Claude Opus 4.6'),
-    LLMModel(id='claude-sonnet-4-5-20250929', name='Claude Sonnet 4.5'),
-    LLMModel(id='claude-haiku-4-5-20251001', name='Claude Haiku 4.5'),
-    LLMModel(id='claude-opus-4-5-20251101', name='Claude Opus 4.5'),
-    LLMModel(id='claude-opus-4-1-20250805', name='Claude Opus 4.1'),
-    LLMModel(id='claude-sonnet-4-20250514', name='Claude Sonnet 4'),
-    LLMModel(id='claude-opus-4-20250514', name='Claude Opus 4'),
-]
+# =========================================================================
+# DB-backed provider settings with short TTL cache
+# =========================================================================
+
+_provider_cache: Dict[str, Any] = {}
+_provider_cache_lock = threading.Lock()
+_PROVIDER_CACHE_TTL = 5.0  # seconds
+
+# =========================================================================
+# Provider name constants
+# =========================================================================
+
+PROVIDER_ANTHROPIC = 'anthropic'
+PROVIDER_OPENAI_COMPATIBLE = 'openai-compatible'
+PROVIDER_OLLAMA = 'ollama'
+PROVIDERS_NON_ANTHROPIC = ('openai-compatible', 'openai', 'wrapper', 'ollama')
+
+
+def _get_cached_setting(key: str) -> Optional[str]:
+    """Read a setting from DB with a short TTL cache to avoid per-request queries."""
+    with _provider_cache_lock:
+        entry = _provider_cache.get(key)
+        if entry and (time.monotonic() - entry['ts']) < _PROVIDER_CACHE_TTL:
+            return entry['val']
+    try:
+        from database import Database
+        db = Database()
+        val = db.get_setting(key)
+        with _provider_cache_lock:
+            _provider_cache[key] = {'val': val, 'ts': time.monotonic()}
+        return val
+    except Exception:
+        return None
+
+
+def _clear_provider_cache():
+    """Flush the provider settings cache (called on force_new)."""
+    with _provider_cache_lock:
+        _provider_cache.clear()
+
+
+def get_effective_provider() -> str:
+    """Return the active LLM provider, checking DB first then env var."""
+    db_val = _get_cached_setting('llm_provider')
+    if db_val:
+        return db_val.lower()
+    return os.environ.get('LLM_PROVIDER', PROVIDER_ANTHROPIC).lower()
+
+
+def model_matches_provider(model_id: str, provider: str) -> bool:
+    """Check whether a model ID plausibly belongs to the given provider."""
+    is_claude_model = 'claude' in model_id.lower()
+    if provider == PROVIDER_ANTHROPIC:
+        return is_claude_model
+    return not is_claude_model
+
+
+def get_effective_base_url() -> str:
+    """Return the active OpenAI base URL, checking DB first then env var."""
+    db_val = _get_cached_setting('openai_base_url')
+    if db_val:
+        return db_val
+    return os.environ.get('OPENAI_BASE_URL', 'http://localhost:8000/v1')
 
 
 class LLMClient(ABC):
@@ -176,6 +251,20 @@ class AnthropicClient(LLMClient):
                 effective_system = system + json_instruction
                 logger.debug("Added JSON format instructions to system prompt")
 
+        # Log request details
+        _log_content("Anthropic system prompt", effective_system)
+        for i, msg in enumerate(messages):
+            content_val = msg.get('content', '')
+            if isinstance(content_val, list):
+                content_str = ' '.join(
+                    part.get('text', '') for part in content_val
+                    if isinstance(part, dict) and part.get('type') == 'text'
+                ) or str(content_val)
+            else:
+                content_str = str(content_val)
+            _log_content(f"Anthropic message[{i}] role={msg.get('role')}", content_str)
+        io_logger.debug(f"Anthropic request: model={model} temperature={temperature} max_tokens={max_tokens}")
+
         response = self._client.messages.create(
             model=model,
             max_tokens=max_tokens,
@@ -196,6 +285,17 @@ class AnthropicClient(LLMClient):
             } if response.usage else None,
             raw_response=response
         )
+
+        # Log response
+        _log_content("Anthropic response", content)
+        if llm_response.usage:
+            io_logger.info(
+                f"Anthropic response: model={llm_response.model}"
+                f" in={llm_response.usage['input_tokens']}"
+                f" out={llm_response.usage['output_tokens']}"
+                f" len={len(content)}"
+            )
+
         self._notify_usage(llm_response)
         return llm_response
 
@@ -206,7 +306,7 @@ class AnthropicClient(LLMClient):
             response = self._client.models.list()
             models = []
             for model in response.data:
-                if 'claude' in model.id.lower():
+                if model_matches_provider(model.id, PROVIDER_ANTHROPIC):
                     models.append(LLMModel(
                         id=model.id,
                         name=model.display_name if hasattr(model, 'display_name') else model.id,
@@ -214,12 +314,8 @@ class AnthropicClient(LLMClient):
                     ))
             return models
         except Exception as e:
-            logger.warning(f"Could not fetch models from Anthropic API: {e}")
-            return self._get_fallback_models()
-
-    def _get_fallback_models(self) -> List[LLMModel]:
-        """Return known models as fallback."""
-        return list(FALLBACK_MODELS)
+            logger.error(f"Could not fetch models from Anthropic API: {e}")
+            return []
 
     def get_provider_name(self) -> str:
         return "anthropic"
@@ -271,6 +367,20 @@ class OpenAICompatibleClient(LLMClient):
         # OpenAI format uses system message in messages array
         all_messages = [{"role": "system", "content": system}] + messages
 
+        # Log request details
+        _log_content("OpenAI system prompt", system)
+        for i, msg in enumerate(messages):
+            content_val = msg.get('content', '')
+            if isinstance(content_val, list):
+                content_str = ' '.join(
+                    part.get('text', '') for part in content_val
+                    if isinstance(part, dict) and part.get('type') == 'text'
+                ) or str(content_val)
+            else:
+                content_str = str(content_val)
+            _log_content(f"OpenAI message[{i}] role={msg.get('role')}", content_str)
+        io_logger.debug(f"OpenAI request: model={model} temperature={temperature} max_tokens={max_tokens}")
+
         # Build request kwargs
         kwargs = {
             "model": model,
@@ -304,6 +414,17 @@ class OpenAICompatibleClient(LLMClient):
             } if response.usage else None,
             raw_response=response
         )
+
+        # Log response
+        _log_content("OpenAI response", content)
+        if llm_response.usage:
+            io_logger.info(
+                f"OpenAI response: model={llm_response.model}"
+                f" in={llm_response.usage['input_tokens']}"
+                f" out={llm_response.usage['output_tokens']}"
+                f" len={len(content)}"
+            )
+
         self._notify_usage(llm_response)
         return llm_response
 
@@ -326,17 +447,13 @@ class OpenAICompatibleClient(LLMClient):
                     name=model_id,
                     created=str(model.created) if hasattr(model, 'created') else None
                 ))
-            return models if models else self._get_fallback_models()
+            return models
         except Exception as e:
-            logger.warning(f"Could not fetch models from OpenAI-compatible API: {e}")
+            logger.error(f"Could not fetch models from OpenAI-compatible API: {e}")
             native = self._try_ollama_native_list()
             if native:
                 return native
-            return self._get_fallback_models()
-
-    def _get_fallback_models(self) -> List[LLMModel]:
-        """Return the configured default model as fallback."""
-        return [LLMModel(id=self.default_model, name=self.default_model)]
+            return []
 
     def get_provider_name(self) -> str:
         return f"openai-compatible ({self.base_url})"
@@ -412,8 +529,8 @@ def get_llm_timeout() -> float:
     the direct Anthropic API.
     """
     from config import LLM_TIMEOUT_DEFAULT, LLM_TIMEOUT_LOCAL
-    provider = os.environ.get('LLM_PROVIDER', 'anthropic').lower()
-    if provider != 'anthropic':
+    provider = get_effective_provider()
+    if provider != PROVIDER_ANTHROPIC:
         return LLM_TIMEOUT_LOCAL
     return LLM_TIMEOUT_DEFAULT
 
@@ -425,8 +542,8 @@ def get_llm_max_retries() -> int:
     slower than the direct Anthropic API.
     """
     from config import LLM_RETRY_MAX_RETRIES, LLM_RETRY_MAX_RETRIES_LOCAL
-    provider = os.environ.get('LLM_PROVIDER', 'anthropic').lower()
-    if provider != 'anthropic':
+    provider = get_effective_provider()
+    if provider != PROVIDER_ANTHROPIC:
         return LLM_RETRY_MAX_RETRIES_LOCAL
     return LLM_RETRY_MAX_RETRIES
 
@@ -508,9 +625,11 @@ def get_llm_client(force_new: bool = False) -> LLMClient:
     """
     Factory function that returns the appropriate LLM client based on config.
 
-    The client is cached for reuse. Use force_new=True to create a fresh client.
+    The client is cached for reuse. Use force_new=True to create a fresh client
+    (also flushes the provider settings cache).
 
-    Environment variables:
+    Settings are read from the database first, falling back to environment
+    variables:
         LLM_PROVIDER: "anthropic" (default) or "openai-compatible"
 
         For anthropic:
@@ -526,16 +645,19 @@ def get_llm_client(force_new: bool = False) -> LLMClient:
     """
     global _cached_client
 
+    if force_new:
+        _clear_provider_cache()
+
     if _cached_client is not None and not force_new:
         return _cached_client
 
-    provider = os.environ.get('LLM_PROVIDER', 'anthropic').lower()
+    provider = get_effective_provider()
 
-    if provider == 'anthropic':
+    if provider == PROVIDER_ANTHROPIC:
         _cached_client = AnthropicClient()
-    elif provider in ('openai-compatible', 'openai', 'wrapper', 'ollama'):
-        base_url = os.environ.get('OPENAI_BASE_URL', 'http://localhost:8000/v1')
-        if provider == 'ollama' and not base_url.rstrip('/').endswith('/v1'):
+    elif provider in PROVIDERS_NON_ANTHROPIC:
+        base_url = get_effective_base_url()
+        if provider == PROVIDER_OLLAMA and not base_url.rstrip('/').endswith('/v1'):
             base_url = base_url.rstrip('/') + '/v1'
             logger.info(f"Ollama provider: normalized base_url to {base_url}")
         _cached_client = OpenAICompatibleClient(base_url=base_url)
@@ -556,9 +678,9 @@ def get_api_key() -> Optional[str]:
         Non-anthropic providers default to "not-needed" since local
         endpoints like Ollama don't require authentication.
     """
-    provider = os.environ.get('LLM_PROVIDER', 'anthropic').lower()
+    provider = get_effective_provider()
 
-    if provider == 'anthropic':
+    if provider == PROVIDER_ANTHROPIC:
         return os.environ.get('ANTHROPIC_API_KEY')
     else:
         return os.environ.get('OPENAI_API_KEY', os.environ.get('ANTHROPIC_API_KEY', 'not-needed'))
@@ -574,11 +696,11 @@ def verify_llm_connection() -> bool:
     Returns:
         True if verification passed, False otherwise
     """
-    provider = os.environ.get('LLM_PROVIDER', 'anthropic').lower()
+    provider = get_effective_provider()
 
-    if provider in ('openai-compatible', 'openai', 'wrapper', 'ollama'):
-        base_url = os.environ.get('OPENAI_BASE_URL', 'http://localhost:8000/v1')
-        if provider == 'ollama' and not base_url.rstrip('/').endswith('/v1'):
+    if provider in PROVIDERS_NON_ANTHROPIC:
+        base_url = get_effective_base_url()
+        if provider == PROVIDER_OLLAMA and not base_url.rstrip('/').endswith('/v1'):
             base_url = base_url.rstrip('/') + '/v1'
         logger.info(f"Verifying LLM endpoint: {base_url}")
 

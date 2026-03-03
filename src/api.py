@@ -1463,6 +1463,7 @@ def get_settings():
     from database import DEFAULT_SYSTEM_PROMPT, DEFAULT_VERIFICATION_PROMPT
     from ad_detector import AdDetector, DEFAULT_MODEL
     from chapters_generator import CHAPTERS_MODEL
+    from llm_client import get_effective_provider, get_effective_base_url, get_api_key, PROVIDER_ANTHROPIC
 
     settings = db.get_all_settings()
 
@@ -1491,6 +1492,12 @@ def get_settings():
         min_cut_confidence = float(min_cut_confidence_str)
     except (ValueError, TypeError):
         min_cut_confidence = 0.80
+
+    # LLM provider settings
+    llm_provider = get_effective_provider()
+    openai_base_url = get_effective_base_url()
+    api_key = get_api_key()
+    api_key_configured = bool(api_key and api_key != 'not-needed')
 
     return json_response({
         'systemPrompt': {
@@ -1533,6 +1540,15 @@ def get_settings():
             'value': min_cut_confidence,
             'isDefault': settings.get('min_cut_confidence', {}).get('is_default', True)
         },
+        'llmProvider': {
+            'value': llm_provider,
+            'isDefault': settings.get('llm_provider', {}).get('is_default', True)
+        },
+        'openaiBaseUrl': {
+            'value': openai_base_url,
+            'isDefault': settings.get('openai_base_url', {}).get('is_default', True)
+        },
+        'apiKeyConfigured': api_key_configured,
         'retentionPeriodMinutes': int(os.environ.get('RETENTION_PERIOD') or settings.get('retention_period_minutes', {}).get('value', '1440')),
         'defaults': {
             'systemPrompt': DEFAULT_SYSTEM_PROMPT,
@@ -1544,7 +1560,9 @@ def get_settings():
             'vttTranscriptsEnabled': True,
             'chaptersEnabled': True,
             'chaptersModel': CHAPTERS_MODEL,
-            'minCutConfidence': 0.80
+            'minCutConfidence': 0.80,
+            'llmProvider': os.environ.get('LLM_PROVIDER', PROVIDER_ANTHROPIC),
+            'openaiBaseUrl': os.environ.get('OPENAI_BASE_URL', 'http://localhost:8000/v1')
         }
     })
 
@@ -1611,6 +1629,25 @@ def update_ad_detection_settings():
         db.set_setting('min_cut_confidence', str(value), is_default=False)
         logger.info(f"Updated min cut confidence to: {value}")
 
+    provider_changed = False
+    if 'llmProvider' in data:
+        db.set_setting('llm_provider', data['llmProvider'], is_default=False)
+        logger.info(f"Updated LLM provider to: {data['llmProvider']}")
+        provider_changed = True
+
+    if 'openaiBaseUrl' in data:
+        from urllib.parse import urlparse
+        parsed = urlparse(data['openaiBaseUrl'])
+        if not parsed.scheme or parsed.scheme not in ('http', 'https') or not parsed.hostname:
+            return json_response({'error': 'Invalid base URL: must be a valid http:// or https:// URL'}, 400)
+        db.set_setting('openai_base_url', data['openaiBaseUrl'], is_default=False)
+        logger.info(f"Updated OpenAI base URL to: {data['openaiBaseUrl']}")
+        provider_changed = True
+
+    if provider_changed:
+        from llm_client import get_llm_client
+        get_llm_client(force_new=True)
+
     return json_response({'message': 'Settings updated'})
 
 
@@ -1628,6 +1665,14 @@ def reset_ad_detection_settings():
     db.reset_setting('vtt_transcripts_enabled')
     db.reset_setting('chapters_enabled')
     db.reset_setting('chapters_model')
+
+    # Reset LLM provider settings back to env var defaults
+    from llm_client import get_llm_client
+    db.reset_setting('llm_provider')
+    db.reset_setting('openai_base_url')
+
+    # Recreate LLM client with reset settings
+    get_llm_client(force_new=True)
 
     # Mark whisper model for reload
     try:
@@ -1653,21 +1698,11 @@ def reset_prompts_only():
     return json_response({'message': 'Prompts reset to defaults'})
 
 
-@api.route('/settings/models', methods=['GET'])
-@log_request
-def get_available_models():
-    """Get list of available Claude models."""
-    from ad_detector import AdDetector
-
-    ad_detector = AdDetector()
-    models = ad_detector.get_available_models()
-
-    # Refresh model pricing with any newly discovered models
+def _enrich_models_with_pricing(models: list) -> None:
+    """Refresh and attach pricing info to a list of model dicts in-place."""
     try:
         db = get_database()
         db.refresh_model_pricing(models)
-
-        # Enrich models with pricing info
         pricing_rows = db.get_model_pricing()
         pricing_lookup = {p['modelId']: p for p in pricing_rows}
         for model in models:
@@ -1678,7 +1713,34 @@ def get_available_models():
     except Exception as e:
         logger.warning(f"Failed to refresh model pricing: {e}")
 
+
+@api.route('/settings/models', methods=['GET'])
+@log_request
+def get_available_models():
+    """Get list of available Claude models."""
+    from ad_detector import AdDetector
+
+    ad_detector = AdDetector()
+    models = ad_detector.get_available_models()
+    _enrich_models_with_pricing(models)
+
     return json_response({'models': models})
+
+
+@api.route('/settings/models/refresh', methods=['POST'])
+@log_request
+def refresh_models():
+    """Force refresh the model list from the LLM provider."""
+    from llm_client import get_llm_client
+    from ad_detector import AdDetector
+
+    get_llm_client(force_new=True)
+    ad_detector = AdDetector()
+    models = ad_detector.get_available_models()
+    _enrich_models_with_pricing(models)
+
+    logger.info(f"Refreshed model list: {len(models)} models available")
+    return json_response({'models': models, 'count': len(models)})
 
 
 @api.route('/settings/whisper-models', methods=['GET'])

@@ -91,7 +91,8 @@ def setup_logging():
 
     # Create application loggers
     for name in ['podcast.api', 'podcast.feed', 'podcast.audio',
-                 'podcast.transcribe', 'podcast.claude', 'podcast.refresh']:
+                 'podcast.transcribe', 'podcast.claude', 'podcast.refresh',
+                 'podcast.llm_io']:
         logging.getLogger(name).setLevel(getattr(logging, log_level, logging.INFO))
 
 

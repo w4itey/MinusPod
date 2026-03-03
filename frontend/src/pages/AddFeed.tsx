@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { addFeed, importOpml, OpmlImportResult } from '../api/feeds';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 // URL validation patterns
 const URL_PATTERN = /^https?:\/\/[a-zA-Z0-9][-a-zA-Z0-9]*(\.[a-zA-Z0-9][-a-zA-Z0-9]*)+.*$/;
@@ -260,7 +261,7 @@ function AddFeed() {
 
           {opmlMutation.isPending ? (
             <div className="space-y-2">
-              <div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full mx-auto"></div>
+              <LoadingSpinner size="md" />
               <p className="text-muted-foreground">Importing feeds...</p>
             </div>
           ) : (

@@ -1422,6 +1422,20 @@ class Database:
             ('chapters_model', env_model or CHAPTERS_MODEL)
         )
 
+        # LLM provider (seeded from env; runtime changes go via settings API)
+        conn.execute(
+            """INSERT INTO settings (key, value, is_default) VALUES (?, ?, 1)
+               ON CONFLICT(key) DO NOTHING""",
+            ('llm_provider', os.environ.get('LLM_PROVIDER', 'anthropic'))
+        )
+
+        # OpenAI base URL (seeded from env; runtime changes go via settings API)
+        conn.execute(
+            """INSERT INTO settings (key, value, is_default) VALUES (?, ?, 1)
+               ON CONFLICT(key) DO NOTHING""",
+            ('openai_base_url', os.environ.get('OPENAI_BASE_URL', 'http://localhost:8000/v1'))
+        )
+
         conn.commit()
         logger.info("Default settings seeded")
 
@@ -1898,10 +1912,11 @@ class Database:
         # Import here to avoid circular import
         from ad_detector import DEFAULT_MODEL
         from chapters_generator import CHAPTERS_MODEL
+        from llm_client import get_effective_provider, PROVIDER_ANTHROPIC
 
         # Provider-aware defaults for model settings
-        provider = os.environ.get('LLM_PROVIDER', 'anthropic').lower()
-        if provider != 'anthropic':
+        provider = get_effective_provider()
+        if provider != PROVIDER_ANTHROPIC:
             env_model = os.environ.get('OPENAI_MODEL')
             model_default = env_model or DEFAULT_MODEL
             chapters_default = env_model or CHAPTERS_MODEL
@@ -1919,6 +1934,8 @@ class Database:
             'vtt_transcripts_enabled': 'true',
             'chapters_enabled': 'true',
             'chapters_model': chapters_default,
+            'llm_provider': os.environ.get('LLM_PROVIDER', 'anthropic'),
+            'openai_base_url': os.environ.get('OPENAI_BASE_URL', 'http://localhost:8000/v1'),
         }
 
         if key in defaults:
