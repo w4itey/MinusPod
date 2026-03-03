@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **Provider-aware API key badge**: Settings UI now shows muted "Not required" badge for Ollama and OpenAI-compatible providers instead of a misleading yellow "Not configured" warning.
 - **Provider-aware model injection**: `_ensure_configured_models_present()` no longer injects stale model IDs from a previous provider (e.g. claude-* models no longer appear in Ollama model dropdowns after switching providers).
+- **Password input autocomplete warnings**: Added `autoComplete` attributes to Settings page password inputs (`current-password`, `new-password`) to resolve Chrome DevTools DOM warnings and improve password manager integration.
 
 ### Changed
 - **Refresh button label**: Model refresh button now shows "Refresh" text alongside the icon (and "Refreshing..." with spinner when loading) instead of being icon-only.

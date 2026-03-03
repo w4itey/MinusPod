@@ -384,6 +384,7 @@ function Settings() {
               <input
                 type="password"
                 id="currentPassword"
+                autoComplete="current-password"
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
                 required
@@ -399,6 +400,7 @@ function Settings() {
             <input
               type="password"
               id="newPassword"
+              autoComplete="new-password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               placeholder={isPasswordSet ? 'Leave empty to remove password' : 'Minimum 8 characters'}
@@ -413,6 +415,7 @@ function Settings() {
             <input
               type="password"
               id="confirmPassword"
+              autoComplete="new-password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
