@@ -151,35 +151,8 @@ def log_request_detailed(f):
 # Maximum retry attempts for failed episodes before marking as permanently_failed
 MAX_EPISODE_RETRIES = 3
 
-# Cancel event registry for in-flight processing threads
-_cancel_events: dict[str, threading.Event] = {}
-_cancel_events_lock = threading.Lock()
-
-
-class ProcessingCancelled(Exception):
-    """Raised when processing is cancelled by user."""
-    pass
-
-
-def _check_cancel(cancel_event, slug, episode_id):
-    """Check if cancellation has been requested and raise if so."""
-    if cancel_event and cancel_event.is_set():
-        audio_logger.info(f"[{slug}:{episode_id}] Processing cancelled by user")
-        raise ProcessingCancelled()
-
-
-def cancel_processing(slug, episode_id):
-    """Signal an in-flight processing thread to stop.
-
-    Returns True if a cancel event was found and signalled, False otherwise.
-    """
-    key = f"{slug}:{episode_id}"
-    with _cancel_events_lock:
-        event = _cancel_events.get(key)
-    if event:
-        event.set()
-        return True
-    return False
+# Cancel primitives (extracted to cancel.py for testability)
+from cancel import ProcessingCancelled, _check_cancel, cancel_processing, _cancel_events, _cancel_events_lock
 
 
 import requests.exceptions
@@ -913,6 +886,11 @@ def _process_episode_background(slug, episode_id, original_url, title, podcast_n
             storage.delete_processed_file(slug, episode_id)
         except Exception as cleanup_err:
             audio_logger.warning(f"[{slug}:{episode_id}] Failed to clean up partial file: {cleanup_err}")
+        # Reset DB status (before finally releases queue, preventing re-queue race)
+        try:
+            db.upsert_episode(slug, episode_id, status='pending', error_message='Canceled by user')
+        except Exception as db_err:
+            audio_logger.warning(f"[{slug}:{episode_id}] Failed to reset status after cancel: {db_err}")
         status_service.complete_job()
     except Exception as e:
         audio_logger.error(f"[{slug}:{episode_id}] Background processing failed: {e}")

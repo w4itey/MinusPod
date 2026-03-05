@@ -17,6 +17,7 @@ from utils.time import parse_timestamp
 from utils.text import extract_text_in_range
 from utils.url import validate_url, SSRFError
 from sponsor_service import SponsorService
+from cancel import cancel_processing
 
 logger = logging.getLogger('podcast.api')
 
@@ -184,6 +185,24 @@ def extract_sponsor_from_text(ad_text: str) -> str:
     return SponsorService.extract_sponsor_from_text(ad_text)
 
 
+def _serialize_auto_process(value):
+    """Convert API boolean/null to DB string for auto_process_override."""
+    if value is True:
+        return 'true'
+    if value is False:
+        return 'false'
+    return None
+
+
+def _deserialize_auto_process(value):
+    """Convert DB string to API boolean/null for auto_process_override."""
+    if value == 'true':
+        return True
+    if value == 'false':
+        return False
+    return None
+
+
 # ========== Feed Endpoints ==========
 
 @api.route('/feeds', methods=['GET'])
@@ -289,11 +308,9 @@ def add_feed():
 
         # Apply auto-process override if provided (before initial refresh)
         auto_process_override = data.get('autoProcessOverride')
-        if auto_process_override is not None:
-            if auto_process_override is True:
-                db.update_podcast(slug, auto_process_override='true')
-            elif auto_process_override is False:
-                db.update_podcast(slug, auto_process_override='false')
+        db_value = _serialize_auto_process(auto_process_override)
+        if db_value is not None:
+            db.update_podcast(slug, auto_process_override=db_value)
 
         # Invalidate feed cache since we added a new feed
         from main import invalidate_feed_cache
@@ -474,12 +491,7 @@ def get_feed(slug):
     feed_url = f"{base_url}/{slug}"
 
     # Convert auto_process_override from string to boolean/null
-    auto_process_override_value = podcast.get('auto_process_override')
-    auto_process_override_result = None
-    if auto_process_override_value == 'true':
-        auto_process_override_result = True
-    elif auto_process_override_value == 'false':
-        auto_process_override_result = False
+    auto_process_override_result = _deserialize_auto_process(podcast.get('auto_process_override'))
 
     return json_response({
         'slug': podcast['slug'],
@@ -527,15 +539,11 @@ def update_feed(slug):
         if api_field in data:
             updates[db_field] = data[api_field]
 
-    # Handle auto-process override specially (can be null, true, or false)
+    # Handle auto-process override specially (can be null, true, or false).
+    # None passes through to DB as NULL (clears the override) -- unlike add_feed
+    # which guards with `if db_value is not None` since there's nothing to clear yet.
     if 'autoProcessOverride' in data:
-        override_value = data['autoProcessOverride']
-        if override_value is None:
-            updates['auto_process_override'] = None
-        elif override_value is True:
-            updates['auto_process_override'] = 'true'
-        elif override_value is False:
-            updates['auto_process_override'] = 'false'
+        updates['auto_process_override'] = _serialize_auto_process(data['autoProcessOverride'])
 
     if not updates:
         return error_response('No valid fields to update', 400)
@@ -1289,27 +1297,27 @@ def cancel_episode_processing(slug, episode_id):
         )
 
     # Signal the processing thread to stop
-    from main import cancel_processing
     thread_signalled = cancel_processing(slug, episode_id)
 
-    # Reset status to pending - use podcast_id join to find by slug
-    conn = db.get_connection()
-    conn.execute(
-        """UPDATE episodes SET status = 'pending', error_message = 'Canceled by user'
-           WHERE podcast_id = (SELECT id FROM podcasts WHERE slug = ?)
-           AND episode_id = ?""",
-        (slug, episode_id)
-    )
-    conn.commit()
+    if not thread_signalled:
+        # No active thread found -- reset DB and release queue directly (stuck episode fallback)
+        conn = db.get_connection()
+        conn.execute(
+            """UPDATE episodes SET status = 'pending', error_message = 'Canceled by user'
+               WHERE podcast_id = (SELECT id FROM podcasts WHERE slug = ?)
+               AND episode_id = ?""",
+            (slug, episode_id)
+        )
+        conn.commit()
 
-    # Release from processing queue if held
-    try:
-        from processing_queue import ProcessingQueue
-        queue = ProcessingQueue()
-        if queue.is_processing(slug, episode_id):
-            queue.release()
-    except Exception as e:
-        logger.warning(f"Could not release processing queue: {e}")
+        try:
+            from processing_queue import ProcessingQueue
+            queue = ProcessingQueue()
+            if queue.is_processing(slug, episode_id):
+                queue.release()
+        except Exception as e:
+            logger.warning(f"Could not release processing queue: {e}")
+    # else: thread will handle DB reset, file cleanup, and queue release
 
     logger.info(f"Canceled processing: {slug}:{episode_id} (thread_signalled={thread_signalled})")
     return json_response({

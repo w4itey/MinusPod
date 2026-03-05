@@ -11,9 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **Auto-process race on feed creation**: New feeds could queue episodes for processing before the user could disable auto-process. The `POST /feeds` endpoint now accepts `autoProcessOverride` so the override is applied before the initial RSS refresh runs.
 - **Cancel does not stop in-flight processing**: The cancel endpoint previously reset DB status but did not signal the running thread. Added cooperative cancellation using `threading.Event` with checkpoints between pipeline stages. Cancelling now actually stops the processing thread and cleans up partial output files.
+- **Cancel endpoint race with background thread**: Cancel endpoint no longer resets DB status when a live thread is signalled -- the thread handles DB reset, file cleanup, and queue release to prevent re-queue races. Endpoint only does direct cleanup as a stuck-episode fallback.
+- **Duplicated auto_process_override conversion**: Extracted `_serialize_auto_process` / `_deserialize_auto_process` helpers replacing identical 6-line if/elif blocks in 3 API endpoints. Non-boolean values now consistently map to None.
 
 ### Added
 - **Auto-process dropdown on Add Feed page**: Users can set auto-process to "Always Enable", "Always Disable", or "Use Global Setting" when adding a feed, eliminating the race window.
+- **Cancel module** (`cancel.py`): Extracted cancel primitives (event registry, `ProcessingCancelled`, `_check_cancel`, `cancel_processing`) from `main.py` for independent testability without Flask/CUDA imports.
+- **Unit tests for cancel and serialization**: 22 new tests covering cancel mechanism (signal, no-op, isolation, cleanup) and auto-process override serialization (roundtrips, edge cases).
 
 ## [1.0.37] - 2026-03-04
 
