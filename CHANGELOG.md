@@ -6,6 +6,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.38] - 2026-03-05
+
+### Fixed
+- **Auto-process race on feed creation**: New feeds could queue episodes for processing before the user could disable auto-process. The `POST /feeds` endpoint now accepts `autoProcessOverride` so the override is applied before the initial RSS refresh runs.
+- **Cancel does not stop in-flight processing**: The cancel endpoint previously reset DB status but did not signal the running thread. Added cooperative cancellation using `threading.Event` with checkpoints between pipeline stages. Cancelling now actually stops the processing thread and cleans up partial output files.
+
+### Added
+- **Auto-process dropdown on Add Feed page**: Users can set auto-process to "Always Enable", "Always Disable", or "Use Global Setting" when adding a feed, eliminating the race window.
+
 ## [1.0.37] - 2026-03-04
 
 ### Fixed

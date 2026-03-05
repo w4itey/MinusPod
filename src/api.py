@@ -287,6 +287,14 @@ def add_feed():
         podcast_id = db.create_podcast(slug, source_url)
         logger.info(f"Created new feed: {slug} -> {source_url}")
 
+        # Apply auto-process override if provided (before initial refresh)
+        auto_process_override = data.get('autoProcessOverride')
+        if auto_process_override is not None:
+            if auto_process_override is True:
+                db.update_podcast(slug, auto_process_override='true')
+            elif auto_process_override is False:
+                db.update_podcast(slug, auto_process_override='false')
+
         # Invalidate feed cache since we added a new feed
         from main import invalidate_feed_cache
         invalidate_feed_cache()
@@ -1280,6 +1288,10 @@ def cancel_episode_processing(slug, episode_id):
             400
         )
 
+    # Signal the processing thread to stop
+    from main import cancel_processing
+    thread_signalled = cancel_processing(slug, episode_id)
+
     # Reset status to pending - use podcast_id join to find by slug
     conn = db.get_connection()
     conn.execute(
@@ -1299,7 +1311,7 @@ def cancel_episode_processing(slug, episode_id):
     except Exception as e:
         logger.warning(f"Could not release processing queue: {e}")
 
-    logger.info(f"Canceled processing: {slug}:{episode_id}")
+    logger.info(f"Canceled processing: {slug}:{episode_id} (thread_signalled={thread_signalled})")
     return json_response({
         'message': 'Episode canceled and reset to pending',
         'episodeId': episode_id,

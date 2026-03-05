@@ -10,10 +10,10 @@ export async function getFeed(slug: string): Promise<Feed> {
   return apiRequest<Feed>(`/feeds/${slug}`);
 }
 
-export async function addFeed(sourceUrl: string, slug?: string): Promise<Feed> {
+export async function addFeed(sourceUrl: string, slug?: string, autoProcessOverride?: boolean | null): Promise<Feed> {
   return apiRequest<Feed>('/feeds', {
     method: 'POST',
-    body: { sourceUrl, slug },
+    body: { sourceUrl, slug, ...(autoProcessOverride != null && { autoProcessOverride }) },
   });
 }
 

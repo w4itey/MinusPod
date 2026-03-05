@@ -60,6 +60,7 @@ function AddFeed() {
   const queryClient = useQueryClient();
   const [sourceUrl, setSourceUrl] = useState('');
   const [customSlug, setCustomSlug] = useState('');
+  const [autoProcessOverride, setAutoProcessOverride] = useState<boolean | null>(null);
   const [showSlug, setShowSlug] = useState(false);
   const [touched, setTouched] = useState(false);
 
@@ -72,7 +73,7 @@ function AddFeed() {
   const urlValidation = useMemo(() => validateUrl(sourceUrl), [sourceUrl]);
 
   const mutation = useMutation({
-    mutationFn: () => addFeed(sourceUrl, customSlug || undefined),
+    mutationFn: () => addFeed(sourceUrl, customSlug || undefined, autoProcessOverride),
     onSuccess: (feed) => {
       queryClient.invalidateQueries({ queryKey: ['feeds'] });
       navigate(`/feeds/${feed.slug}`);
@@ -177,21 +178,50 @@ function AddFeed() {
           </button>
 
           {showSlug && (
-            <div className="mt-4">
-              <label htmlFor="slug" className="block text-sm font-medium text-foreground mb-2">
-                Custom Slug (optional)
-              </label>
-              <input
-                type="text"
-                id="slug"
-                value={customSlug}
-                onChange={(e) => setCustomSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-                placeholder="my-podcast"
-                className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-              <p className="mt-1 text-sm text-muted-foreground">
-                Custom URL path for this feed. Only lowercase letters, numbers, and hyphens.
-              </p>
+            <div className="mt-4 space-y-4">
+              <div>
+                <label htmlFor="slug" className="block text-sm font-medium text-foreground mb-2">
+                  Custom Slug (optional)
+                </label>
+                <input
+                  type="text"
+                  id="slug"
+                  value={customSlug}
+                  onChange={(e) => setCustomSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                  placeholder="my-podcast"
+                  className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Custom URL path for this feed. Only lowercase letters, numbers, and hyphens.
+                </p>
+              </div>
+
+              <div>
+                <label htmlFor="autoProcess" className="block text-sm font-medium text-foreground mb-2">
+                  Auto-Process
+                </label>
+                <select
+                  id="autoProcess"
+                  value={
+                    autoProcessOverride === true ? 'enable' :
+                    autoProcessOverride === false ? 'disable' : 'global'
+                  }
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === 'enable') setAutoProcessOverride(true);
+                    else if (value === 'disable') setAutoProcessOverride(false);
+                    else setAutoProcessOverride(null);
+                  }}
+                  className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="global">Use Global Setting</option>
+                  <option value="enable">Always Enable</option>
+                  <option value="disable">Always Disable</option>
+                </select>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Controls whether new episodes are automatically processed. Set before adding to prevent unwanted processing during initial refresh.
+                </p>
+              </div>
             </div>
           )}
         </div>

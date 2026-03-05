@@ -151,6 +151,37 @@ def log_request_detailed(f):
 # Maximum retry attempts for failed episodes before marking as permanently_failed
 MAX_EPISODE_RETRIES = 3
 
+# Cancel event registry for in-flight processing threads
+_cancel_events: dict[str, threading.Event] = {}
+_cancel_events_lock = threading.Lock()
+
+
+class ProcessingCancelled(Exception):
+    """Raised when processing is cancelled by user."""
+    pass
+
+
+def _check_cancel(cancel_event, slug, episode_id):
+    """Check if cancellation has been requested and raise if so."""
+    if cancel_event and cancel_event.is_set():
+        audio_logger.info(f"[{slug}:{episode_id}] Processing cancelled by user")
+        raise ProcessingCancelled()
+
+
+def cancel_processing(slug, episode_id):
+    """Signal an in-flight processing thread to stop.
+
+    Returns True if a cancel event was found and signalled, False otherwise.
+    """
+    key = f"{slug}:{episode_id}"
+    with _cancel_events_lock:
+        event = _cancel_events.get(key)
+    if event:
+        event.set()
+        return True
+    return False
+
+
 import requests.exceptions
 from llm_client import is_retryable_error, is_llm_api_error, start_episode_token_tracking, get_episode_token_totals
 
@@ -871,15 +902,24 @@ def reset_stuck_processing_episodes():
         )
 
 
-def _process_episode_background(slug, episode_id, original_url, title, podcast_name, description, artwork_url, published_at=None):
+def _process_episode_background(slug, episode_id, original_url, title, podcast_name, description, artwork_url, published_at=None, cancel_event=None):
     """Background thread wrapper for process_episode with queue management."""
     queue = ProcessingQueue()
     try:
-        process_episode(slug, episode_id, original_url, title, podcast_name, description, artwork_url, published_at)
+        process_episode(slug, episode_id, original_url, title, podcast_name, description, artwork_url, published_at, cancel_event=cancel_event)
+    except ProcessingCancelled:
+        audio_logger.info(f"[{slug}:{episode_id}] Cancelled - cleaning up partial files")
+        try:
+            storage.delete_processed_file(slug, episode_id)
+        except Exception as cleanup_err:
+            audio_logger.warning(f"[{slug}:{episode_id}] Failed to clean up partial file: {cleanup_err}")
+        status_service.complete_job()
     except Exception as e:
         audio_logger.error(f"[{slug}:{episode_id}] Background processing failed: {e}")
     finally:
         queue.release()
+        with _cancel_events_lock:
+            _cancel_events.pop(f"{slug}:{episode_id}", None)
 
 
 def start_background_processing(slug, episode_id, original_url, title, podcast_name, description, artwork_url, published_at=None):
@@ -909,10 +949,16 @@ def start_background_processing(slug, episode_id, original_url, title, podcast_n
     # This ensures the new episode is tracked before any other episode can start
     status_service.start_job(slug, episode_id, title, podcast_name)
 
+    # Create cancel event for cooperative cancellation
+    cancel_event = threading.Event()
+    key = f"{slug}:{episode_id}"
+    with _cancel_events_lock:
+        _cancel_events[key] = cancel_event
+
     # Start background thread
     processing_thread = threading.Thread(
         target=_process_episode_background,
-        args=(slug, episode_id, original_url, title, podcast_name, description, artwork_url, published_at),
+        args=(slug, episode_id, original_url, title, podcast_name, description, artwork_url, published_at, cancel_event),
         daemon=True
     )
     processing_thread.start()
@@ -1414,7 +1460,7 @@ def _handle_processing_failure(slug, episode_id, episode_title, podcast_name,
 def process_episode(slug: str, episode_id: str, episode_url: str,
                    episode_title: str = "Unknown", podcast_name: str = "Unknown",
                    episode_description: str = None, episode_artwork_url: str = None,
-                   episode_published_at: str = None):
+                   episode_published_at: str = None, cancel_event: threading.Event = None):
     """Process a single episode through the full ad removal pipeline.
 
     Pipeline stages:
@@ -1455,10 +1501,12 @@ def process_episode(slug: str, episode_id: str, episode_url: str,
 
         # Stage 1: Download and transcribe
         audio_path, segments = _download_and_transcribe(slug, episode_id, episode_url, podcast_name)
+        _check_cancel(cancel_event, slug, episode_id)
 
         try:
             # Stage 2: Audio analysis
             audio_analysis_result = _run_audio_analysis(slug, episode_id, audio_path, segments)
+            _check_cancel(cancel_event, slug, episode_id)
 
             # Progress callback for detection stages
             current_pass = "pass1"
@@ -1472,6 +1520,7 @@ def process_episode(slug: str, episode_id: str, episode_url: str,
                 skip_patterns, audio_analysis_result,
                 podcast_name, episode_title, detection_progress_callback
             )
+            _check_cancel(cancel_event, slug, episode_id)
 
             all_ads = first_pass_ads.copy()
 
@@ -1484,6 +1533,7 @@ def process_episode(slug: str, episode_id: str, episode_url: str,
                 slug, episode_id, all_ads, segments, audio_path,
                 episode_description, episode_duration, min_cut_confidence, podcast_name
             )
+            _check_cancel(cancel_event, slug, episode_id)
 
             # Stage 5: Process audio
             status_service.update_job_stage("pass1:processing", 80)
@@ -1498,6 +1548,7 @@ def process_episode(slug: str, episode_id: str, episode_url: str,
                 raise Exception("Failed to process audio with FFMPEG")
 
             original_duration = local_audio_processor.get_audio_duration(audio_path)
+            _check_cancel(cancel_event, slug, episode_id)
 
             # Stage 6: Verification pass
             current_pass = "pass2"
@@ -1507,6 +1558,7 @@ def process_episode(slug: str, episode_id: str, episode_url: str,
                 podcast_description, skip_patterns, min_cut_confidence,
                 local_audio_processor, detection_progress_callback
             )
+            _check_cancel(cancel_event, slug, episode_id)
 
             # Merge pass 2 ads into combined list for UI
             if v_ads_for_ui:
@@ -1537,6 +1589,8 @@ def process_episode(slug: str, episode_id: str, episode_url: str,
             if os.path.exists(audio_path):
                 os.unlink(audio_path)
 
+    except ProcessingCancelled:
+        raise
     except Exception as e:
         _handle_processing_failure(slug, episode_id, episode_title, podcast_name,
                                     episode_data, e, start_time)
