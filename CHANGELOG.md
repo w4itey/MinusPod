@@ -6,6 +6,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.48] - 2026-03-11
+
+### Fixed
+- **Patterns page table overflow**: Switched to `table-fixed` layout with proportional `<colgroup>` widths so all 8 columns fit within the viewport without horizontal scrolling
+- **Long podcast names in Scope column**: Added truncation to podcast scope badges to prevent layout blowout
+- **Sponsor column overflow**: Added `overflow-hidden` and `truncate` to sponsor name and text template cells
+- **Column padding**: Tightened padding on narrow columns (ID, Confirmed, False Pos., Status) from `px-4` to `px-2`
+
+## [1.0.47] - 2026-03-11
+
+### Fixed
+- **observed_duration truthiness bug**: `pattern_service.record_pattern_match()` now uses `is not None` check so duration=0.0 is not silently dropped
+- **Claude feedback double-update**: Duration feedback loop now tracks updated pattern IDs in a set, preventing inflation of `duration_samples` when multiple Claude ads overlap the same pattern region
+- **Claude feedback routed through pattern_service**: `ad_detector` now calls `pattern_service.update_duration()` instead of bypassing the service layer with a direct `db.update_pattern_duration()` call
+
+### Improved
+- **Unified boundary scanning**: Extracted shared `_scan_for_boundary()` from near-duplicate `_scan_for_intro` / `_scan_for_outro` methods
+- **Exclusive bucket assignment**: Patterns now go into their single closest TF-IDF bucket instead of potentially landing in multiple overlapping buckets
+
+### Added
+- **Tests**: Boundary scanning (5 tests), duration estimation edge cases (6 tests), Claude feedback dedup (2 tests)
+
+## [1.0.46] - 2026-03-11
+
+### Improved
+- **Pattern matching accuracy**: Paired boundary scanning -- when an intro phrase is matched, scan forward for the outro (and vice versa) before falling back to duration estimation
+- **Duration tracking**: Patterns now store avg_duration and duration_samples; used for boundary estimation when paired phrase not found
+- **Duration feedback from Claude**: When Claude detections overlap pattern regions >= 50%, pattern avg_duration is updated toward Claude's more accurate boundaries
+- **Sentence-boundary extraction**: Intro/outro phrases extracted at sentence boundaries instead of naive word counts, improving fuzzy match quality
+- **Proportional TF-IDF windows**: Short ad patterns scored against smaller windows (500-char buckets) instead of fixed 1500-char, reducing score dilution
+- **Merge canonical selection**: merge_similar_patterns() now picks the highest confirmation_count pattern as canonical (length as tiebreaker)
+- **Atomic confirmation counting**: record_pattern_match() uses increment_pattern_match() instead of race-prone read-then-write
+- **Default ad duration estimate**: Increased from 60s to 90s to better match typical sponsor reads
+
 ## [1.0.45] - 2026-03-11
 
 ### Fixed

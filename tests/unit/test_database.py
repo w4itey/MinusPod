@@ -210,6 +210,73 @@ class TestAdPatternOperations:
         assert len(patterns) >= 2
 
 
+class TestPatternDuration:
+    """Tests for update_pattern_duration and create_ad_pattern with duration."""
+
+    @staticmethod
+    def _get_duration_fields(db, pattern_id):
+        """Fetch avg_duration and duration_samples for a pattern."""
+        conn = db.get_connection()
+        return conn.execute(
+            "SELECT avg_duration, duration_samples FROM ad_patterns WHERE id = ?",
+            (pattern_id,)
+        ).fetchone()
+
+    def test_update_pattern_duration_first_sample(self, temp_db):
+        """First duration sample: NULL -> value, duration_samples 0 -> 1."""
+        pattern_id = temp_db.create_ad_pattern(scope='global', sponsor='TestSponsor')
+
+        row = self._get_duration_fields(temp_db, pattern_id)
+        assert row['avg_duration'] is None
+        assert row['duration_samples'] == 0
+
+        temp_db.update_pattern_duration(pattern_id, 60.0)
+
+        row = self._get_duration_fields(temp_db, pattern_id)
+        assert abs(row['avg_duration'] - 60.0) < 0.001
+        assert row['duration_samples'] == 1
+
+    def test_update_pattern_duration_running_average(self, temp_db):
+        """Subsequent samples update as running average."""
+        pattern_id = temp_db.create_ad_pattern(scope='global', sponsor='TestSponsor')
+
+        temp_db.update_pattern_duration(pattern_id, 60.0)
+        temp_db.update_pattern_duration(pattern_id, 80.0)
+
+        row = self._get_duration_fields(temp_db, pattern_id)
+        # Running average: (60*1 + 80) / 2 = 70
+        assert abs(row['avg_duration'] - 70.0) < 0.001
+        assert row['duration_samples'] == 2
+
+    def test_update_pattern_duration_increments_samples(self, temp_db):
+        """duration_samples increments with each update."""
+        pattern_id = temp_db.create_ad_pattern(scope='global', sponsor='TestSponsor')
+
+        for i in range(5):
+            temp_db.update_pattern_duration(pattern_id, 60.0)
+
+        row = self._get_duration_fields(temp_db, pattern_id)
+        assert row['duration_samples'] == 5
+
+    def test_create_ad_pattern_with_duration(self, temp_db):
+        """Creating a pattern with duration sets avg_duration and duration_samples=1."""
+        pattern_id = temp_db.create_ad_pattern(
+            scope='global', sponsor='DurationSponsor', duration=45.5
+        )
+
+        row = self._get_duration_fields(temp_db, pattern_id)
+        assert abs(row['avg_duration'] - 45.5) < 0.001
+        assert row['duration_samples'] == 1
+
+    def test_create_ad_pattern_without_duration(self, temp_db):
+        """Creating a pattern without duration leaves avg_duration NULL, samples=0."""
+        pattern_id = temp_db.create_ad_pattern(scope='global', sponsor='NoDuration')
+
+        row = self._get_duration_fields(temp_db, pattern_id)
+        assert row['avg_duration'] is None
+        assert row['duration_samples'] == 0
+
+
 class TestSettingsOperations:
     """Tests for settings operations."""
 

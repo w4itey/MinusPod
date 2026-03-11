@@ -12,7 +12,7 @@ info:
     - Monitor system status and trigger cleanup operations
     - Manage cross-episode ad patterns with network and podcast scope
     - Submit corrections to improve ad detection accuracy
-  version: 1.0.45
+  version: 1.0.48
   contact:
     name: MinusPod
   license:
@@ -3065,6 +3065,14 @@ components:
         false_positive_count:
           type: integer
           description: Number of times pattern was marked as false positive
+        avg_duration:
+          type:
+            - number
+            - 'null'
+          description: Running average of observed ad duration in seconds. Null for patterns that have not yet been matched with duration data.
+        duration_samples:
+          type: integer
+          description: Number of duration observations used to compute avg_duration
         last_matched_at:
           type:
             - string

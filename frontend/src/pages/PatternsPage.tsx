@@ -103,7 +103,7 @@ function PatternsPage() {
       return <span className="px-2 py-0.5 text-xs rounded bg-purple-500/20 text-purple-600 dark:text-purple-400">Network: {pattern.network_id}</span>;
     } else if (pattern.scope === 'podcast') {
       return (
-        <span className="px-2 py-0.5 text-xs rounded bg-green-500/20 text-green-600 dark:text-green-400">
+        <span className="px-2 py-0.5 text-xs rounded bg-green-500/20 text-green-600 dark:text-green-400 truncate block">
           {pattern.podcast_name || 'Podcast'}
         </span>
       );
@@ -143,9 +143,9 @@ function PatternsPage() {
     return pages;
   };
 
-  const SortHeader = ({ field, label }: { field: keyof AdPattern; label: string }) => (
+  const SortHeader = ({ field, label, className }: { field: keyof AdPattern; label: string; className?: string }) => (
     <th
-      className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-accent/50"
+      className={`py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-accent/50 ${className || 'px-4'}`}
       onClick={() => handleSort(field)}
     >
       <div className="flex items-center gap-1">
@@ -316,17 +316,27 @@ function PatternsPage() {
       {/* Desktop Table Layout */}
       <div className="hidden sm:block bg-card rounded-lg border border-border overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-border">
+          <table className="w-full table-fixed divide-y divide-border">
+            <colgroup>
+              <col className="w-[5%]" />
+              <col className="w-[18%]" />
+              <col className="w-[30%]" />
+              <col className="w-[8%]" />
+              <col className="w-[8%]" />
+              <col className="w-[12%]" />
+              <col className="w-[12%]" />
+              <col className="w-[7%]" />
+            </colgroup>
             <thead className="bg-muted/50">
               <tr>
-                <SortHeader field="id" label="ID" />
+                <SortHeader field="id" label="ID" className="px-2" />
                 <SortHeader field="scope" label="Scope" />
                 <SortHeader field="sponsor" label="Sponsor" />
-                <SortHeader field="confirmation_count" label="Confirmed" />
-                <SortHeader field="false_positive_count" label="False Pos." />
+                <SortHeader field="confirmation_count" label="Confirmed" className="px-2" />
+                <SortHeader field="false_positive_count" label="False Pos." className="px-2" />
                 <SortHeader field="created_at" label="Created" />
                 <SortHeader field="last_matched_at" label="Last Matched" />
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                <th className="px-2 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                   Status
                 </th>
               </tr>
@@ -338,28 +348,28 @@ function PatternsPage() {
                   className="hover:bg-accent/50 cursor-pointer transition-colors"
                   onClick={() => setSelectedPattern(pattern)}
                 >
-                  <td className="px-4 py-3 whitespace-nowrap text-sm font-mono text-muted-foreground">
+                  <td className="px-2 py-3 whitespace-nowrap text-sm font-mono text-muted-foreground">
                     #{pattern.id}
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap">
+                  <td className="px-4 py-3 overflow-hidden">
                     {getScopeBadge(pattern)}
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="text-sm font-medium text-foreground">
+                  <td className="px-4 py-3 overflow-hidden">
+                    <div className="text-sm font-medium text-foreground truncate">
                       {pattern.sponsor || '(Unknown)'}
                     </div>
                     {pattern.text_template && (
-                      <div className="text-xs text-muted-foreground truncate max-w-xs">
+                      <div className="text-xs text-muted-foreground truncate">
                         {pattern.text_template.substring(0, 60)}...
                       </div>
                     )}
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap">
+                  <td className="px-2 py-3 whitespace-nowrap">
                     <span className="text-sm text-green-600 dark:text-green-400 font-medium">
                       {pattern.confirmation_count}
                     </span>
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap">
+                  <td className="px-2 py-3 whitespace-nowrap">
                     <span className={`text-sm font-medium ${
                       pattern.false_positive_count > 0
                         ? 'text-red-600 dark:text-red-400'
@@ -374,7 +384,7 @@ function PatternsPage() {
                   <td className="px-4 py-3 whitespace-nowrap text-sm text-muted-foreground">
                     {formatDate(pattern.last_matched_at)}
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap">
+                  <td className="px-2 py-3 whitespace-nowrap">
                     {getStatusBadge(pattern.is_active)}
                   </td>
                 </tr>

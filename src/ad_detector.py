@@ -20,7 +20,8 @@ from config import (
     BOUNDARY_EXTENSION_WINDOW, BOUNDARY_EXTENSION_MAX,
     AD_CONTENT_URL_PATTERNS, AD_CONTENT_PROMO_PHRASES,
     LOW_CONFIDENCE, CONTENT_DURATION_THRESHOLD, LOW_EVIDENCE_WARN_THRESHOLD,
-    MIN_KEYWORD_LENGTH, MIN_UNCOVERED_TAIL_DURATION
+    MIN_KEYWORD_LENGTH, MIN_UNCOVERED_TAIL_DURATION,
+    PATTERN_CORRECTION_OVERLAP_THRESHOLD
 )
 from utils.constants import (
     INVALID_SPONSOR_VALUES, STRUCTURAL_FIELDS,
@@ -684,9 +685,18 @@ def validate_ad_timestamps(ads: List[Dict], segments: List[Dict],
     return validated
 
 
+# --- Region unpacking helper ---
+
+def _unpack_region(region) -> tuple:
+    """Extract (start, end) from a region dict or tuple."""
+    if isinstance(region, dict):
+        return region['start'], region['end']
+    return region[0], region[1]
+
+
 # --- Uncovered tail preservation (Fix 2) ---
 
-def get_uncovered_portions(ad: Dict, covered_regions: List[tuple],
+def get_uncovered_portions(ad: Dict, covered_regions: list,
                            min_duration: float = None) -> List[Dict]:
     """Find portions of an ad not covered by pattern-matched regions.
 
@@ -695,7 +705,7 @@ def get_uncovered_portions(ad: Dict, covered_regions: List[tuple],
 
     Args:
         ad: Ad dict with 'start' and 'end'
-        covered_regions: List of (start, end) tuples from pattern matches
+        covered_regions: List of region dicts or (start, end) tuples
         min_duration: Minimum duration for an uncovered portion to keep
                      (defaults to MIN_UNCOVERED_TAIL_DURATION)
 
@@ -715,7 +725,8 @@ def get_uncovered_portions(ad: Dict, covered_regions: List[tuple],
 
     # Clip covered regions to ad boundaries and collect
     clipped = []
-    for cov_start, cov_end in covered_regions:
+    for region in covered_regions:
+        cov_start, cov_end = _unpack_region(region)
         c_start = max(cov_start, ad_start)
         c_end = min(cov_end, ad_end)
         if c_start < c_end:
@@ -1903,7 +1914,11 @@ class AdDetector:
                         'pattern_id': match.pattern_id
                     }
                     all_ads.append(ad)
-                    pattern_matched_regions.append((match.start, match.end))
+                    pattern_matched_regions.append({
+                        'start': match.start,
+                        'end': match.end,
+                        'pattern_id': match.pattern_id
+                    })
                     fp_added += 1
 
                     # Record pattern match for metrics and promotion
@@ -1953,7 +1968,11 @@ class AdDetector:
                         'pattern_id': match.pattern_id
                     }
                     all_ads.append(ad)
-                    pattern_matched_regions.append((match.start, match.end))
+                    pattern_matched_regions.append({
+                        'start': match.start,
+                        'end': match.end,
+                        'pattern_id': match.pattern_id
+                    })
                     tp_added += 1
 
                     # Record pattern match for metrics and promotion
@@ -1984,6 +2003,26 @@ class AdDetector:
         # Merge Claude detections with pattern matches
         claude_ads = result.get('ads', [])
         cross_episode_skipped = 0
+
+        # Duration feedback: update pattern avg_duration from Claude's more accurate boundaries
+        updated_patterns = set()
+        for ad in claude_ads:
+            for region in pattern_matched_regions:
+                pid = region.get('pattern_id')
+                if not pid or pid in updated_patterns:
+                    continue
+                overlap = self._compute_overlap(
+                    ad['start'], ad['end'],
+                    region['start'], region['end']
+                )
+                if overlap >= PATTERN_CORRECTION_OVERLAP_THRESHOLD:
+                    observed_duration = ad['end'] - ad['start']
+                    if self.pattern_service:
+                        self.pattern_service.update_duration(
+                            pid, observed_duration
+                        )
+                        updated_patterns.add(pid)
+
         for ad in claude_ads:
             uncovered_portions = get_uncovered_portions(ad, pattern_matched_regions)
 
@@ -2047,18 +2086,22 @@ class AdDetector:
         return result
 
     def _is_region_covered(self, start: float, end: float,
-                           covered_regions: List[tuple]) -> bool:
+                           covered_regions: list) -> bool:
         """Check if a time region is substantially covered by existing detections."""
-        for cov_start, cov_end in covered_regions:
-            # Check for significant overlap (>50%)
-            overlap_start = max(start, cov_start)
-            overlap_end = min(end, cov_end)
-            overlap = max(0, overlap_end - overlap_start)
-
-            duration = end - start
-            if duration > 0 and overlap / duration > 0.5:
+        for region in covered_regions:
+            cov_start, cov_end = _unpack_region(region)
+            if self._compute_overlap(cov_start, cov_end, start, end) > 0.5:
                 return True
         return False
+
+    @staticmethod
+    def _compute_overlap(a_start, a_end, b_start, b_end):
+        """Return fraction of region B covered by region A (0.0-1.0)."""
+        overlap_start = max(a_start, b_start)
+        overlap_end = min(a_end, b_end)
+        overlap = max(0, overlap_end - overlap_start)
+        b_duration = b_end - b_start
+        return overlap / b_duration if b_duration > 0 else 0.0
 
     def _get_segment_text(self, segments: List[Dict], start: float, end: float) -> str:
         """Extract transcript text within a time range."""

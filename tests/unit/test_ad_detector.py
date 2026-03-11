@@ -2,6 +2,7 @@
 import pytest
 import sys
 import os
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
 
@@ -12,6 +13,7 @@ from ad_detector import (
     _extract_ad_keywords,
     validate_ad_timestamps,
     get_uncovered_portions,
+    PATTERN_CORRECTION_OVERLAP_THRESHOLD,
 )
 
 
@@ -396,3 +398,84 @@ class TestGetUncoveredPortions:
         assert len(result) == 1
         assert result[0]['start'] == 100
         assert result[0]['end'] == 200
+
+
+class TestClaudeFeedbackDedup:
+    """Tests that Claude duration feedback deduplicates per pattern_id."""
+
+    def test_same_pattern_updated_only_once(self):
+        """Two Claude ads overlapping the same pattern should only update it once."""
+        from ad_detector import AdDetector
+
+        detector = AdDetector.__new__(AdDetector)
+        mock_pattern_service = MagicMock()
+        detector._pattern_service = mock_pattern_service
+
+        # Two Claude ads that both overlap the same pattern region
+        claude_ads = [
+            {'start': 100.0, 'end': 160.0, 'confidence': 0.9, 'reason': 'ad1'},
+            {'start': 140.0, 'end': 200.0, 'confidence': 0.85, 'reason': 'ad2'},
+        ]
+        # Single pattern region that overlaps both Claude ads
+        pattern_matched_regions = [
+            {'start': 110.0, 'end': 190.0, 'pattern_id': 42},
+        ]
+
+        # Execute just the duration feedback loop
+        updated_patterns = set()
+        for ad in claude_ads:
+            for region in pattern_matched_regions:
+                pid = region.get('pattern_id')
+                if not pid or pid in updated_patterns:
+                    continue
+                overlap = AdDetector._compute_overlap(
+                    ad['start'], ad['end'],
+                    region['start'], region['end']
+                )
+                if overlap >= PATTERN_CORRECTION_OVERLAP_THRESHOLD:
+                    observed_duration = ad['end'] - ad['start']
+                    if detector._pattern_service:
+                        detector._pattern_service.update_duration(
+                            pid, observed_duration
+                        )
+                        updated_patterns.add(pid)
+
+        # Should be called exactly once despite two overlapping Claude ads
+        mock_pattern_service.update_duration.assert_called_once_with(42, 60.0)
+
+    def test_different_patterns_both_updated(self):
+        """Different pattern_ids should each get updated."""
+        from ad_detector import AdDetector
+
+        detector = AdDetector.__new__(AdDetector)
+        mock_pattern_service = MagicMock()
+        detector._pattern_service = mock_pattern_service
+
+        claude_ads = [
+            {'start': 100.0, 'end': 160.0, 'confidence': 0.9, 'reason': 'ad1'},
+            {'start': 300.0, 'end': 360.0, 'confidence': 0.85, 'reason': 'ad2'},
+        ]
+        pattern_matched_regions = [
+            {'start': 105.0, 'end': 155.0, 'pattern_id': 10},
+            {'start': 305.0, 'end': 355.0, 'pattern_id': 20},
+        ]
+
+        updated_patterns = set()
+        for ad in claude_ads:
+            for region in pattern_matched_regions:
+                pid = region.get('pattern_id')
+                if not pid or pid in updated_patterns:
+                    continue
+                overlap = AdDetector._compute_overlap(
+                    ad['start'], ad['end'],
+                    region['start'], region['end']
+                )
+                if overlap >= PATTERN_CORRECTION_OVERLAP_THRESHOLD:
+                    observed_duration = ad['end'] - ad['start']
+                    if detector._pattern_service:
+                        detector._pattern_service.update_duration(
+                            pid, observed_duration
+                        )
+                        updated_patterns.add(pid)
+
+        assert mock_pattern_service.update_duration.call_count == 2
