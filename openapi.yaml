@@ -12,7 +12,7 @@ info:
     - Monitor system status and trigger cleanup operations
     - Manage cross-episode ad patterns with network and podcast scope
     - Submit corrections to improve ad detection accuracy
-  version: 1.0.50
+  version: 1.0.51
   contact:
     name: MinusPod
   license:
@@ -608,6 +608,31 @@ paths:
                   episodeId:
                     type: string
                   transcript:
+                    type: string
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /feeds/{slug}/episodes/{episodeId}/original-transcript:
+    get:
+      tags:
+        - Episodes
+      summary: Get original (pre-cut) transcript
+      description: Returns the original transcript text captured before ad segments were removed. Only available for episodes processed with v1.0.51+.
+      operationId: getOriginalTranscript
+      parameters:
+        - $ref: '#/components/parameters/slug'
+        - $ref: '#/components/parameters/episodeId'
+      responses:
+        '200':
+          description: Original transcript
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  episodeId:
+                    type: string
+                  originalTranscript:
                     type: string
         '404':
           $ref: '#/components/responses/NotFound'
@@ -2720,6 +2745,9 @@ components:
                 $ref: '#/components/schemas/AdMarker'
             transcriptAvailable:
               type: boolean
+            originalTranscriptAvailable:
+              type: boolean
+              description: Whether an original (pre-cut) transcript is available
             adsRemovedFirstPass:
               type: integer
               description: Number of ads detected by first pass (includes merged)

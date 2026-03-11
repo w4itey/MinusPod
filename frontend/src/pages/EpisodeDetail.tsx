@@ -1,12 +1,23 @@
 import { useState, useRef, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getEpisode, reprocessEpisode, regenerateChapters } from '../api/feeds';
+import { getEpisode, getOriginalTranscript, reprocessEpisode, regenerateChapters } from '../api/feeds';
 import { submitCorrection } from '../api/patterns';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { EPISODE_STATUS_COLORS } from '../utils/episodeStatus';
 import AdEditor, { AdCorrection } from '../components/AdEditor';
 import PatternLink from '../components/PatternLink';
+import CollapsibleSection from '../components/CollapsibleSection';
+
+function TranscriptBlock({ text }: { text: string }) {
+  return (
+    <div className="prose prose-sm dark:prose-invert max-w-none">
+      <pre className="whitespace-pre-wrap text-sm text-muted-foreground font-sans">
+        {text}
+      </pre>
+    </div>
+  );
+}
 
 // Save status type for visual feedback
 type SaveStatus = 'idle' | 'saving' | 'success' | 'error';
@@ -19,6 +30,9 @@ function EpisodeDetail() {
   const [showReprocessMenu, setShowReprocessMenu] = useState(false);
   const [editorSelectedAdIndex, setEditorSelectedAdIndex] = useState(0);
   const [savedScrollY, setSavedScrollY] = useState<number | null>(null);
+  const [originalTranscriptRequested, setOriginalTranscriptRequested] = useState(
+    () => localStorage.getItem('episode-original-transcript') === 'true'
+  );
   const editorRef = useRef<HTMLDivElement>(null);
 
   const queryClient = useQueryClient();
@@ -27,6 +41,12 @@ function EpisodeDetail() {
     queryKey: ['episode', slug, episodeId],
     queryFn: () => getEpisode(slug!, episodeId!),
     enabled: !!slug && !!episodeId,
+  });
+
+  const { data: originalTranscript, isError: originalTranscriptError } = useQuery({
+    queryKey: ['originalTranscript', slug, episodeId],
+    queryFn: () => getOriginalTranscript(slug!, episodeId!),
+    enabled: originalTranscriptRequested && !!slug && !!episodeId && !!episode?.originalTranscriptAvailable,
   });
 
   const reprocessMutation = useMutation({
@@ -535,14 +555,26 @@ function EpisodeDetail() {
       )}
 
       {episode.transcript && (
-        <div className="bg-card rounded-lg border border-border p-6">
-          <h2 className="text-xl font-semibold text-foreground mb-4">Transcript</h2>
-          <div className="prose prose-sm dark:prose-invert max-w-none">
-            <pre className="whitespace-pre-wrap text-sm text-muted-foreground font-sans">
-              {episode.transcript}
-            </pre>
-          </div>
-        </div>
+        <CollapsibleSection title="Transcript" defaultOpen={false} storageKey="episode-transcript">
+          <TranscriptBlock text={episode.transcript} />
+        </CollapsibleSection>
+      )}
+
+      {episode.originalTranscriptAvailable && (
+        <CollapsibleSection
+          title="Original Transcript"
+          subtitle="Raw transcript before ads were removed"
+          defaultOpen={false}
+          storageKey="episode-original-transcript"
+          onToggle={(open) => { if (open) setOriginalTranscriptRequested(true); }}
+        >
+          {originalTranscript
+            ? <TranscriptBlock text={originalTranscript} />
+            : originalTranscriptError
+              ? <p className="text-destructive">Failed to load original transcript</p>
+              : <LoadingSpinner className="py-4" />
+          }
+        </CollapsibleSection>
       )}
 
     </div>

@@ -257,6 +257,7 @@ def _download_and_transcribe(slug, episode_id, episode_url, podcast_name):
 
         transcript_text = transcriber.segments_to_text(segments)
         storage.save_transcript(slug, episode_id, transcript_text)
+        storage.save_original_transcript(slug, episode_id, transcript_text)
 
     return audio_path, segments
 

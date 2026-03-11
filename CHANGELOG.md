@@ -6,6 +6,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.51] - 2026-03-11
+
+### Added
+- **Original transcript storage**: First-pass transcript is saved as `original_transcript_text` in episode_details (write-once, preserved across reprocessing) so users can see what was removed
+- **Original Transcript panel**: Episode Detail page shows collapsible "Original Transcript" section with raw pre-cut transcript
+- **Ad Editor Workflow section in README**: Clarifies that ad preview audio plays processed output intentionally (review-and-reprocess model)
+
+### Changed
+- **Transcript panel now collapsible**: Existing transcript display uses `CollapsibleSection` component for consistency with the rest of the app
+- **API response includes original transcript**: `originalTranscriptAvailable` boolean in episode detail endpoint; full text lazy-loaded via `/original-transcript` endpoint
+- **CollapsibleSection localStorage key**: Added optional `storageKey` prop; episode detail panels use explicit keys instead of `settings-section-*` prefix
+- **Shared `_get_episode_db_id` helper**: Lightweight ID lookup extracted for `save_episode_details`, `save_original_transcript`, `save_episode_audio_analysis`, `clear_episode_details`
+- **Original transcript routed through Storage layer**: `storage.save_original_transcript()` for consistency with other transcript operations
+
+### Fixed
+- **`_get_episode_db_id` return type**: Annotation now `-> Optional[int]` matching actual behavior (returns `None` when not found)
+- **`get_original_transcript` two-query overhead**: Collapsed `_get_episode_db_id` + SELECT into a single JOIN query
+- **Original transcript spinner on error**: Destructure `isError` from query; show error message instead of infinite `LoadingSpinner`
+- **Original transcript section empty on revisit**: Initialize `originalTranscriptRequested` from localStorage so query fires when section was previously opened
+- **Original transcript query fires without availability check**: Added `originalTranscriptAvailable` guard to query `enabled` condition to prevent spurious API calls
+- **README ToC**: Trimmed deeply nested sub-items to top-level sections with select sub-items
+
+### Note
+- Episodes processed before v1.0.51 will not have an original transcript. To populate it, reprocess the episode -- the next transcription will be captured as the original.
+
 ## [1.0.50] - 2026-03-11
 
 ### Fixed

@@ -69,7 +69,9 @@ class EpisodeMixin:
         conn = self.get_connection()
         cursor = conn.execute(
             """SELECT e.*, p.slug, p.title AS podcast_title,
-                      ed.transcript_text, ed.transcript_vtt,
+                      ed.transcript_text,
+                      (ed.original_transcript_text IS NOT NULL) as has_original_transcript,
+                      ed.transcript_vtt,
                       ed.chapters_json, ed.ad_markers_json,
                       ed.first_pass_response, ed.first_pass_prompt,
                       ed.second_pass_prompt, ed.second_pass_response
@@ -204,6 +206,22 @@ class EpisodeMixin:
 
         return db_id
 
+    def _get_episode_db_id(self, slug: str, episode_id: str) -> Optional[int]:
+        """Lightweight lookup: resolve (slug, episode_id) to the episodes.id PK.
+
+        Only joins episodes + podcasts (skips episode_details).
+        Returns the integer PK, or None if not found.
+        """
+        conn = self.get_connection()
+        cursor = conn.execute(
+            """SELECT e.id FROM episodes e
+               JOIN podcasts p ON e.podcast_id = p.id
+               WHERE p.slug = ? AND e.episode_id = ?""",
+            (slug, episode_id)
+        )
+        row = cursor.fetchone()
+        return row['id'] if row else None
+
     def save_episode_details(self, slug: str, episode_id: str,
                             transcript_text: str = None,
                             transcript_vtt: str = None,
@@ -216,12 +234,9 @@ class EpisodeMixin:
         """Save or update episode details (transcript, VTT, chapters, ad markers, pass data)."""
         conn = self.get_connection()
 
-        # Get episode database ID
-        episode = self.get_episode(slug, episode_id)
-        if not episode:
+        db_episode_id = self._get_episode_db_id(slug, episode_id)
+        if not db_episode_id:
             raise ValueError(f"Episode not found: {slug}/{episode_id}")
-
-        db_episode_id = episode['id']
 
         # Check if details exist
         cursor = conn.execute(
@@ -282,17 +297,51 @@ class EpisodeMixin:
 
         conn.commit()
 
+    def save_original_transcript(self, slug: str, episode_id: str, transcript_text: str):
+        """Save original (pre-cut) transcript. Write-once: never overwrites an existing value."""
+        conn = self.get_connection()
+
+        db_episode_id = self._get_episode_db_id(slug, episode_id)
+        if not db_episode_id:
+            logger.warning(f"Episode not found for original transcript: {slug}/{episode_id}")
+            return
+
+        # Atomic upsert with write-once guard: inserts if no row exists,
+        # otherwise sets original_transcript_text only if still NULL.
+        conn.execute(
+            """INSERT INTO episode_details (episode_id, original_transcript_text)
+               VALUES (?, ?)
+               ON CONFLICT(episode_id) DO UPDATE
+               SET original_transcript_text = COALESCE(
+                   episode_details.original_transcript_text, excluded.original_transcript_text
+               )""",
+            (db_episode_id, transcript_text)
+        )
+
+        conn.commit()
+        logger.debug(f"[{slug}:{episode_id}] Saved original transcript to database")
+
+    def get_original_transcript(self, slug: str, episode_id: str) -> str:
+        """Get original (pre-cut) transcript text, or None."""
+        conn = self.get_connection()
+        cursor = conn.execute(
+            """SELECT ed.original_transcript_text FROM episode_details ed
+               JOIN episodes e ON ed.episode_id = e.id
+               JOIN podcasts p ON e.podcast_id = p.id
+               WHERE p.slug = ? AND e.episode_id = ?""",
+            (slug, episode_id)
+        )
+        row = cursor.fetchone()
+        return row['original_transcript_text'] if row else None
+
     def save_episode_audio_analysis(self, slug: str, episode_id: str, audio_analysis_json: str):
         """Save audio analysis results for an episode."""
         conn = self.get_connection()
 
-        # Get episode database ID
-        episode = self.get_episode(slug, episode_id)
-        if not episode:
+        db_episode_id = self._get_episode_db_id(slug, episode_id)
+        if not db_episode_id:
             logger.warning(f"Episode not found for audio analysis: {slug}/{episode_id}")
             return
-
-        db_episode_id = episode['id']
 
         # Check if details exist
         cursor = conn.execute(
@@ -322,12 +371,9 @@ class EpisodeMixin:
         """Clear transcript and ad markers for an episode."""
         conn = self.get_connection()
 
-        # Get episode database ID
-        episode = self.get_episode(slug, episode_id)
-        if not episode:
+        db_episode_id = self._get_episode_db_id(slug, episode_id)
+        if not db_episode_id:
             return
-
-        db_episode_id = episode['id']
 
         conn.execute(
             "DELETE FROM episode_details WHERE episode_id = ?",

@@ -6,6 +6,8 @@ interface CollapsibleSectionProps {
   defaultOpen?: boolean;
   children: ReactNode;
   headerRight?: ReactNode;
+  storageKey?: string;
+  onToggle?: (isOpen: boolean) => void;
 }
 
 function CollapsibleSection({
@@ -14,11 +16,13 @@ function CollapsibleSection({
   defaultOpen = false,
   children,
   headerRight,
+  storageKey,
+  onToggle,
 }: CollapsibleSectionProps) {
-  const storageKey = `settings-section-${title.toLowerCase().replace(/\s+/g, '-')}`;
+  const resolvedKey = storageKey || `settings-section-${title.toLowerCase().replace(/\s+/g, '-')}`;
 
   const [isOpen, setIsOpen] = useState(() => {
-    const stored = localStorage.getItem(storageKey);
+    const stored = localStorage.getItem(resolvedKey);
     if (stored !== null) return stored === 'true';
     return defaultOpen;
   });
@@ -27,8 +31,8 @@ function CollapsibleSection({
   const [maxHeight, setMaxHeight] = useState<string>(isOpen ? 'none' : '0px');
 
   useEffect(() => {
-    localStorage.setItem(storageKey, String(isOpen));
-  }, [isOpen, storageKey]);
+    localStorage.setItem(resolvedKey, String(isOpen));
+  }, [isOpen, resolvedKey]);
 
   useEffect(() => {
     if (isOpen) {
@@ -66,7 +70,11 @@ function CollapsibleSection({
     <div className="bg-card rounded-lg border border-border">
       <button
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => {
+          const next = !isOpen;
+          setIsOpen(next);
+          onToggle?.(next);
+        }}
         className="w-full flex items-center justify-between p-4 sm:p-6 text-left"
       >
         <div className="flex-1 min-w-0">

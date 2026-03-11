@@ -153,6 +153,10 @@ class Storage:
             return episode['transcript_text']
         return None
 
+    def save_original_transcript(self, slug: str, episode_id: str, transcript: str) -> None:
+        """Save original (pre-cut) transcript to database. Write-once."""
+        self.db.save_original_transcript(slug, episode_id, transcript)
+
     # ========== VTT Transcript Methods (Podcasting 2.0) ==========
 
     def save_transcript_vtt(self, slug: str, episode_id: str, vtt_content: str) -> None:

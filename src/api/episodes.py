@@ -172,6 +172,7 @@ def get_episode(slug, episode_id):
         'adDetectionStatus': episode.get('ad_detection_status'),
         'transcript': episode.get('transcript_text'),
         'transcriptAvailable': bool(episode.get('transcript_text')),
+        'originalTranscriptAvailable': bool(episode.get('has_original_transcript')),
         'transcriptVttAvailable': transcript_vtt_available,
         'transcriptVttUrl': f"/episodes/{slug}/{episode_id}.vtt" if transcript_vtt_available else None,
         'chaptersAvailable': chapters_available,
@@ -199,6 +200,22 @@ def get_transcript(slug, episode_id):
     return json_response({
         'episodeId': episode_id,
         'transcript': transcript
+    })
+
+
+@api.route('/feeds/<slug>/episodes/<episode_id>/original-transcript', methods=['GET'])
+@log_request
+def get_original_transcript(slug, episode_id):
+    """Get original (pre-cut) transcript for an episode."""
+    db = get_database()
+
+    transcript = db.get_original_transcript(slug, episode_id)
+    if not transcript:
+        return error_response('Original transcript not found', 404)
+
+    return json_response({
+        'episodeId': episode_id,
+        'originalTranscript': transcript
     })
 
 

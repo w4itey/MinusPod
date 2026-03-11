@@ -32,6 +32,7 @@ export interface EpisodeDetail extends Episode {
   originalUrl?: string;
   processedUrl?: string;
   transcript?: string;
+  originalTranscriptAvailable?: boolean;
   transcriptVttAvailable?: boolean;
   transcriptVttUrl?: string;
   chaptersAvailable?: boolean;

@@ -63,6 +63,13 @@ export async function getEpisode(slug: string, episodeId: string): Promise<Episo
   return apiRequest<EpisodeDetail>(`/feeds/${slug}/episodes/${episodeId}`);
 }
 
+export async function getOriginalTranscript(slug: string, episodeId: string): Promise<string> {
+  const response = await apiRequest<{ originalTranscript: string }>(
+    `/feeds/${slug}/episodes/${episodeId}/original-transcript`
+  );
+  return response.originalTranscript;
+}
+
 export async function getArtwork(slug: string): Promise<string> {
   return `/api/v1/feeds/${slug}/artwork`;
 }

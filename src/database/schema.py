@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS episode_details (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     episode_id INTEGER UNIQUE NOT NULL,
     transcript_text TEXT,
+    original_transcript_text TEXT,
     transcript_vtt TEXT,
     chapters_json TEXT,
     ad_markers_json TEXT,
@@ -511,6 +512,7 @@ class SchemaMixin:
             ('audio_analysis_json', 'TEXT'),
             ('transcript_vtt', 'TEXT'),
             ('chapters_json', 'TEXT'),
+            ('original_transcript_text', 'TEXT'),
         ]
         for col, definition in details_migrations:
             self._add_column_if_missing(conn, 'episode_details', col, definition, det_cols)

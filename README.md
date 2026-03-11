@@ -9,21 +9,23 @@ Removes ads from podcasts using Whisper transcription. Serves modified RSS feeds
 ## Table of Contents
 
 - [How It Works](#how-it-works)
-- [Advanced Features](#advanced-features-quick-reference)
+- [Advanced Features (Quick Reference)](#advanced-features-quick-reference)
 - [Requirements](#requirements)
 - [Quick Start](#quick-start)
 - [Web Interface](#web-interface)
+  - [Ad Editor Workflow](#ad-editor-workflow)
+  - [Screenshots](#screenshots)
 - [Configuration](#configuration)
 - [Finding Podcast RSS Feeds](#finding-podcast-rss-feeds)
 - [Usage](#usage)
   - [Audiobookshelf](#audiobookshelf)
 - [Environment Variables](#environment-variables)
+  - [Using Claude Code Wrapper (Max Subscription)](#using-claude-code-wrapper-max-subscription)
 - [Using Ollama (Local LLM)](#using-ollama-local-llm)
 - [API](#api)
 - [Remote Access](#remote-access)
 - [Data Storage](#data-storage)
-- [Custom Assets](#custom-assets-optional)
-- [License](#license)
+- [Custom Assets (Optional)](#custom-assets-optional)
 
 ## How It Works
 
@@ -220,6 +222,12 @@ The server includes a web-based management UI at `/ui/`:
 - **History** - View processing history with stats, filtering, and export
 - **Settings** - Configure LLM provider (Anthropic/Ollama/OpenAI-compatible), AI models, ad detection prompts, retention period, view system statistics, LLM token usage and cost
 - **Real-Time Status Bar** - Shows current processing progress across all pages
+
+### Ad Editor Workflow
+
+The ad editor follows a **review-and-reprocess** model. When you listen to a detected ad segment, the audio player plays the **processed output** (post-cut audio), not the original. This is intentional: you are verifying what the final listener will hear. If a cut sounds wrong, adjust the boundaries and reprocess -- the system will re-cut from the original source audio.
+
+The **Original Transcript** panel on the Episode Detail page shows the full pre-cut transcript so you can see exactly what text was identified and removed.
 
 ### Ad Editor (Mobile-First)
 
