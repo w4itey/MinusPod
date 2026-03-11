@@ -1680,6 +1680,8 @@ class Database:
 
         if sort_col == 'episode_number':
             order_clause = f"ORDER BY e.episode_number IS NULL, e.episode_number {sort_direction}"
+        elif sort_col == 'published_at':
+            order_clause = f"ORDER BY COALESCE(e.published_at, e.created_at) {sort_direction}"
         else:
             order_clause = f"ORDER BY e.{sort_col} {sort_direction}"
 
@@ -2095,6 +2097,26 @@ class Database:
                 except (ValueError, TypeError):
                     pass
 
+            # Check for existing episode with same title+date but different ID
+            # Skip insert to prevent duplicate rows from GUID changes
+            if ep.get('title') and iso_published:
+                existing = conn.execute(
+                    """SELECT episode_id, episode_number FROM episodes
+                       WHERE podcast_id = ? AND title = ? AND published_at = ?
+                       AND episode_id != ?""",
+                    (podcast_id, ep.get('title'), iso_published, ep['id'])
+                ).fetchone()
+                if existing:
+                    # Backfill episode_number on existing row if missing
+                    if ep.get('episode_number') and not existing['episode_number']:
+                        conn.execute(
+                            """UPDATE episodes SET episode_number = ?
+                               WHERE podcast_id = ? AND episode_id = ?
+                               AND episode_number IS NULL""",
+                            (ep.get('episode_number'), podcast_id, existing['episode_id'])
+                        )
+                    continue  # Skip - episode already exists with different GUID
+
             try:
                 cursor = conn.execute(
                     """INSERT INTO episodes
@@ -2102,7 +2124,12 @@ class Database:
                         artwork_url, episode_number, published_at, status)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'discovered')
                        ON CONFLICT(podcast_id, episode_id) DO UPDATE SET
-                        episode_number = COALESCE(excluded.episode_number, episodes.episode_number)""",
+                        episode_number = COALESCE(excluded.episode_number, episodes.episode_number),
+                        published_at = COALESCE(episodes.published_at, excluded.published_at),
+                        original_url = COALESCE(episodes.original_url, excluded.original_url),
+                        title = COALESCE(episodes.title, excluded.title),
+                        description = COALESCE(episodes.description, excluded.description),
+                        artwork_url = COALESCE(episodes.artwork_url, excluded.artwork_url)""",
                     (
                         podcast_id,
                         ep['id'],

@@ -6,6 +6,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.45] - 2026-03-11
+
+### Fixed
+- **Auto-processing self-match**: Dedup check in auto-process loop matched the episode's own record, preventing all new episodes from being queued. Added `episode_id != ep['id']` guard so dedup only triggers for genuinely different episode rows.
+- **Duplicate episode rows from GUID changes**: `bulk_upsert_discovered_episodes` now checks for existing episodes with same title+date before inserting, preventing duplicate rows when RSS feeds change GUIDs. Backfills `episode_number` on existing rows if missing.
+- **Sort broken for NULL `published_at`**: "Newest First" sort now uses `COALESCE(published_at, created_at)` so episodes with NULL `published_at` (from pre-v1.0.43 processing) sort by creation date instead of sinking to the bottom.
+- **ON CONFLICT doesn't backfill NULL fields**: `bulk_upsert_discovered_episodes` ON CONFLICT clause now backfills NULL `published_at`, `original_url`, `title`, `description`, and `artwork_url` from RSS data without overwriting existing values.
+
 ## [1.0.44] - 2026-03-11
 
 ### Fixed

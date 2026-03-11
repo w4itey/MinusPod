@@ -582,7 +582,7 @@ def refresh_rss_feed(slug: str, feed_url: str, force: bool = False):
                         existing_by_title = db.get_episode_by_title_and_date(
                             slug, ep.get('title'), iso_published
                         )
-                        if existing_by_title:
+                        if existing_by_title and existing_by_title['episode_id'] != ep['id']:
                             refresh_logger.warning(
                                 f"[{slug}] Episode ID changed: {existing_by_title['episode_id']} -> {ep['id']}, "
                                 f"title: {ep.get('title')}"
