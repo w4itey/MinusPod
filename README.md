@@ -210,11 +210,15 @@ Access the web UI at `http://localhost:8000/ui/` to add and manage feeds.
 The server includes a web-based management UI at `/ui/`:
 
 - **Dashboard** - View all feeds with artwork and episode counts
-- **Add Feed** - Add new podcasts by RSS URL
-- **Feed Management** - Refresh, delete, copy feed URLs, set network override
+- **Add Feed** - Add new podcasts by RSS URL with optional feed cap (max episodes served to clients)
+- **Feed Management** - Refresh, delete, copy feed URLs, set network override, configure per-feed episode cap
+- **Episode Discovery** - All episodes from a feed are surfaced as "discovered" on every refresh. Process any episode at any time from the feed detail page
+- **Bulk Actions** - Select multiple episodes and apply Process, Reprocess, Reprocess (Full), or Delete in one action
+- **Episode Sorting** - Sort by publish date, episode number, or creation date
+- **Pagination** - Feed detail episode list is paginated (25/50/100/500 per page)
 - **Patterns** - View and manage cross-episode ad patterns with sponsor names
 - **History** - View processing history with stats, filtering, and export
-- **Settings** - Configure LLM provider (Anthropic/Ollama/OpenAI-compatible), AI models, ad detection prompts, view system statistics, LLM token usage and cost, and run cleanup
+- **Settings** - Configure LLM provider (Anthropic/Ollama/OpenAI-compatible), AI models, ad detection prompts, retention period, view system statistics, LLM token usage and cost
 - **Real-Time Status Bar** - Shows current processing progress across all pages
 
 ### Ad Editor (Mobile-First)
@@ -348,7 +352,7 @@ This is a comma-separated list of domains excluded from Audiobookshelf's SSRF fi
 | `BASE_URL` | `http://localhost:8000` | Public URL for generated feed links |
 | `WHISPER_MODEL` | `small` | Whisper model size (tiny/base/small/medium/large) |
 | `WHISPER_DEVICE` | `cuda` | Device for Whisper (cuda/cpu) |
-| `RETENTION_PERIOD` | `1440` | Minutes to keep processed episodes (1440 = 24 hours) |
+| `RETENTION_PERIOD` | `1440` | **Deprecated.** Legacy minutes-based retention (auto-converted to days on first startup). Use the Settings UI or `PUT /api/v1/settings/retention` instead. Retention now resets episodes to "discovered" instead of deleting them. |
 | `TUNNEL_TOKEN` | optional | Cloudflare tunnel token for remote access |
 
 ### Using Claude Code Wrapper (Max Subscription)
@@ -517,8 +521,10 @@ REST API available at `/api/v1/`. Interactive docs at `/docs`. See `openapi.yaml
 
 Key endpoints:
 - `GET /api/v1/feeds` - List all feeds
-- `POST /api/v1/feeds` - Add a new feed
+- `POST /api/v1/feeds` - Add a new feed (supports `maxEpisodes` for RSS cap)
 - `POST /api/v1/feeds/import-opml` - Import feeds from OPML file
+- `GET /api/v1/feeds/{slug}/episodes` - List episodes (supports `sort_by`, `sort_dir`, `status` filter, pagination)
+- `POST /api/v1/feeds/{slug}/episodes/bulk` - Bulk episode actions (process, reprocess, reprocess_full, delete)
 - `POST /api/v1/feeds/{slug}/episodes/{id}/reprocess` - Force reprocess (supports `mode`: reprocess/full)
 - `POST /api/v1/feeds/{slug}/reprocess-all` - Batch reprocess all episodes
 - `POST /api/v1/feeds/{slug}/episodes/{id}/retry-ad-detection` - Retry ad detection only
@@ -532,7 +538,9 @@ Key endpoints:
 - `GET /api/v1/status/stream` - SSE endpoint for real-time status updates
 - `GET /api/v1/system/token-usage` - LLM token usage and cost breakdown by model
 - `GET /api/v1/system/model-pricing` - All known LLM model pricing rates
+- `POST /api/v1/system/vacuum` - Trigger SQLite VACUUM to reclaim disk space
 - `GET /api/v1/settings` - Get current settings (includes LLM provider, API key status)
+- `GET/PUT /api/v1/settings/retention` - Get or update retention configuration (days, enabled/disabled)
 - `PUT /api/v1/settings/ad-detection` - Update ad detection config (model, provider, prompts)
 - `GET /api/v1/settings/models` - List available AI models from current provider
 - `POST /api/v1/settings/models/refresh` - Force refresh model list from provider

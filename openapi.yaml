@@ -233,6 +233,11 @@ paths:
                   type: string
                   description: Optional custom slug (auto-generated if not provided)
                   example: my-podcast
+                maxEpisodes:
+                  type: integer
+                  minimum: 10
+                  maximum: 500
+                  description: Maximum number of episodes served in the RSS feed (default 300)
       responses:
         '201':
           description: Feed created successfully
@@ -406,6 +411,11 @@ paths:
                     - boolean
                     - 'null'
                   description: Override auto-process setting (null uses global)
+                maxEpisodes:
+                  type: integer
+                  minimum: 10
+                  maximum: 500
+                  description: Maximum number of episodes served in the RSS feed (default 300)
       responses:
         '200':
           description: Feed updated successfully
@@ -522,6 +532,20 @@ paths:
             type: integer
             minimum: 0
             default: 0
+        - name: sort_by
+          in: query
+          description: Field to sort episodes by
+          schema:
+            type: string
+            enum: [published_at, created_at, episode_number, title, status]
+            default: published_at
+        - name: sort_dir
+          in: query
+          description: Sort direction
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
       responses:
         '200':
           description: List of episodes
