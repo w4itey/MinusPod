@@ -1,5 +1,5 @@
 # Stage 1: Build frontend
-FROM node:20-alpine AS frontend-builder
+FROM --platform=linux/amd64 node:20-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
@@ -18,7 +18,7 @@ RUN npm run build
 # Stage 2: Python application
 # Use CUDA-only image (no cuDNN) - PyTorch bundles its own cuDNN
 # Avoids version mismatch between system cuDNN and PyTorch's bundled cuDNN
-FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04
+FROM --platform=linux/amd64 nvidia/cuda:12.1.1-runtime-ubuntu22.04
 
 # Install Python 3.11 and system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \

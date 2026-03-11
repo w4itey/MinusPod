@@ -5,6 +5,7 @@ import os
 import re
 from typing import List, Dict, Optional, Tuple
 
+from config import DEFAULT_CHAPTERS_MODEL as _DEFAULT_CHAPTERS_MODEL
 from utils.time import parse_timestamp, adjust_timestamp
 from utils.text import extract_text_from_segments
 from llm_client import (
@@ -20,7 +21,7 @@ MIN_CHAPTER_DURATION = 180.0
 
 # Default model for chapter generation tasks (titles, topic detection, splitting).
 # Uses Haiku for cost efficiency -- these are simple classification/generation tasks.
-CHAPTERS_MODEL = "claude-haiku-4-5-20251001"
+CHAPTERS_MODEL = _DEFAULT_CHAPTERS_MODEL
 
 
 def get_chapters_model() -> str:

@@ -10,4 +10,4 @@ mkdir -p /app/data/podcasts
 # cd to src directory so relative imports work correctly
 cd /app/src
 exec gunicorn --bind 0.0.0.0:8000 --workers 2 --threads 8 \
-  --timeout 600 --graceful-timeout 330 --access-logfile - main:app
+  --timeout 600 --graceful-timeout 330 --access-logfile - main_app:app

@@ -117,6 +117,11 @@ DEFAULT_AD_DURATION_ESTIMATE = 90.0  # Assumed ad length when only intro/outro f
 SPONSOR_MISMATCH_MAX_GAP = 60.0      # Max gap for sponsor mismatch extension
 
 # ============================================================
+# Volume Analysis (DAI ads)
+# ============================================================
+VOLUME_ANOMALY_THRESHOLD_DB = 3.0    # dB deviation from baseline to flag as anomaly
+
+# ============================================================
 # Transition Detection (DAI ads)
 # ============================================================
 TRANSITION_THRESHOLD_DB = 12.0       # Min dB jump between frames to flag (real DAI splices are 12+ dB)
@@ -178,6 +183,12 @@ WHISPER_MEMORY_PROFILES = {
     'turbo': (5.0, 0.20),     # ~5GB VRAM (distilled large)
 }
 WHISPER_DEFAULT_PROFILE = (5.0, 0.20)  # Conservative default (medium-like)
+
+# ============================================================
+# Default LLM Models
+# ============================================================
+DEFAULT_AD_DETECTION_MODEL = "claude-sonnet-4-5-20250929"
+DEFAULT_CHAPTERS_MODEL = "claude-haiku-4-5-20251001"
 
 # ============================================================
 # User-Agent Strings

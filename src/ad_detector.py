@@ -21,7 +21,8 @@ from config import (
     AD_CONTENT_URL_PATTERNS, AD_CONTENT_PROMO_PHRASES,
     LOW_CONFIDENCE, CONTENT_DURATION_THRESHOLD, LOW_EVIDENCE_WARN_THRESHOLD,
     MIN_KEYWORD_LENGTH, MIN_UNCOVERED_TAIL_DURATION,
-    PATTERN_CORRECTION_OVERLAP_THRESHOLD
+    PATTERN_CORRECTION_OVERLAP_THRESHOLD,
+    DEFAULT_AD_DETECTION_MODEL
 )
 from utils.constants import (
     INVALID_SPONSOR_VALUES, STRUCTURAL_FIELDS,
@@ -31,8 +32,8 @@ from utils.constants import (
 
 logger = logging.getLogger('podcast.claude')
 
-# Default model - Claude Sonnet 4.5
-DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
+# Default model - imported from config, re-exported for downstream consumers
+DEFAULT_MODEL = DEFAULT_AD_DETECTION_MODEL
 
 # User prompt template (not configurable via UI - just formats the transcript)
 # Description is optional - may contain sponsor lists, chapter markers, or content context

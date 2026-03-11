@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 import json
 
-from utils.audio import get_audio_duration as _utils_get_audio_duration
+from utils.audio import get_audio_duration
 
 logger = logging.getLogger('podcast.fingerprint')
 
@@ -404,7 +404,7 @@ class AudioFingerprinter:
 
         Delegates to utils.audio.get_audio_duration for consistent implementation.
         """
-        duration = _utils_get_audio_duration(audio_path)
+        duration = get_audio_duration(audio_path)
         return duration if duration is not None else 0.0
 
     def _merge_overlapping_matches(

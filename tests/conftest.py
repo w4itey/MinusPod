@@ -153,7 +153,7 @@ def mock_episode(temp_db, mock_podcast):
 def app_client():
     """Flask test client for API integration tests."""
     # Import here to avoid circular imports and allow test isolation
-    from main import app
+    from main_app import app
 
     app.config['TESTING'] = True
     app.config['DEBUG'] = False

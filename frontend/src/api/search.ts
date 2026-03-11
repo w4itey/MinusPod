@@ -1,4 +1,4 @@
-import { apiRequest } from './client';
+import { apiRequest, buildQueryString } from './client';
 
 export interface SearchResult {
   type: 'episode' | 'podcast' | 'pattern' | 'sponsor';
@@ -30,11 +30,8 @@ export async function search(
   type?: 'episode' | 'podcast' | 'pattern' | 'sponsor',
   limit?: number
 ): Promise<SearchResponse> {
-  const params = new URLSearchParams({ q: query });
-  if (type) params.append('type', type);
-  if (limit) params.append('limit', limit.toString());
-
-  return apiRequest<SearchResponse>(`/search?${params.toString()}`);
+  const qs = buildQueryString({ q: query, type, limit });
+  return apiRequest<SearchResponse>(`/search${qs}`);
 }
 
 export async function rebuildSearchIndex(): Promise<{ message: string; indexedCount: number }> {

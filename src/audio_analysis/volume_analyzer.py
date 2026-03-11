@@ -13,6 +13,7 @@ from typing import List, Tuple, Optional
 import os
 
 from .base import AudioSegmentSignal, LoudnessFrame, SignalType
+from config import VOLUME_ANOMALY_THRESHOLD_DB
 from utils.audio import get_audio_duration
 
 logger = logging.getLogger('podcast.audio_analysis.volume')
@@ -29,7 +30,7 @@ class VolumeAnalyzer:
     def __init__(
         self,
         frame_duration: float = 5.0,
-        anomaly_threshold_db: float = 3.0,
+        anomaly_threshold_db: float = VOLUME_ANOMALY_THRESHOLD_DB,
         min_anomaly_duration: float = 15.0
     ):
         """

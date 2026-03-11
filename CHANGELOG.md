@@ -6,6 +6,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.49] - 2026-03-11
+
+### Fixed
+- **AudioMetadata unbounded cache**: Added `_MAX_CACHE_SIZE = 500` with LRU eviction to prevent memory leak on long-running servers
+- **Unused axios dependency**: Removed `axios` from frontend dependencies (codebase uses `fetch` via `apiRequest()`)
+- **Dockerfile missing platform**: Added `--platform=linux/amd64` to both FROM statements per project guidelines
+
+### Improved
+- **Centralized LLM model constants**: Moved `DEFAULT_AD_DETECTION_MODEL` and `DEFAULT_CHAPTERS_MODEL` to `config.py`; `ad_detector.py` and `chapters_generator.py` import from config
+- **Standardized import aliases**: Removed inconsistent `_get_audio_duration` / `_utils_get_audio_duration` aliases in `audio_processor.py`, `transcriber.py`, `audio_fingerprinter.py`; all now use direct `from utils.audio import get_audio_duration`
+- **Frontend query string builder**: Extracted `buildQueryString()` utility in `api/client.ts`; refactored `feeds.ts`, `history.ts`, `search.ts`, `patterns.ts` to use it
+- **Volume threshold in config**: Moved `VolumeAnalyzer` default `anomaly_threshold_db` (3.0) to `config.py` as `VOLUME_ANOMALY_THRESHOLD_DB`
+
+### Post-Review Fixes
+- **CRITICAL: `get_podcast_id` missing method**: `cleanup_duplicate_episodes()` in `database/maintenance.py` called nonexistent `get_podcast_id()`; replaced with `get_podcast_by_slug()` + id extraction
+- **Duplicate `MAX_EPISODE_RETRIES` constant**: Removed independent definitions from `main_app/routes.py`, `processing.py`, and `background.py`; all three now import from `config.py`
+- **Split `_permanently_failed_warned` set**: Created `main_app/shared_state.py` with shared set; `routes.py` and `processing.py` both import from it, restoring cross-module log dedup
+- **Duplicate json import in routes.py**: Removed `import json as _json` alias, replaced `_json.xxx` calls with `json.xxx`
+- **Unused inter-mixin import in stats.py**: Removed dead `from database.settings import DEFAULT_MODEL_PRICING` import
+- **Inline imports in main_app/__init__.py**: Moved `import threading`, `import json`, `import secrets` to top-level; kept `from version import __version__` deferred (path constraint)
+- **Inline `import json as _json` in processing.py**: Moved `json` import to top-level, removed inline alias in `_run_audio_analysis()`
+
+### Refactored
+- **database.py -> database/ package**: Split 4170-line monolith into 12-file package with mixin classes (SchemaMixin, PodcastMixin, EpisodeMixin, SettingsMixin, PatternMixin, SponsorMixin, StatsMixin, MaintenanceMixin, FingerprintMixin, QueueMixin, SearchMixin). All downstream imports preserved.
+- **api.py -> api/ package**: Split 3616-line monolith into 11-file package with Flask Blueprint sub-modules (feeds, episodes, history, settings, system, patterns, sponsors, status, auth, search). All routes preserved.
+- **main.py -> main_app/ package**: Split 2043-line monolith into 6-file package (cache, feeds, background, processing, routes). Updated entrypoint.sh for `main_app:app`.
+- **AdEditor.tsx -> components**: Split 1022-line component into orchestrator + 8 sub-components in `ad-editor/` directory. Deduplicated BoundaryControls (3x -> 1x with variant prop) and ActionButtons (3x -> 1x with variant prop).
+- **Settings.tsx -> sections**: Split 963-line page into orchestrator + 11 section components + `settingsUtils.ts` in `settings/` directory. SecuritySection owns its own password state.
+
 ## [1.0.48] - 2026-03-11
 
 ### Fixed

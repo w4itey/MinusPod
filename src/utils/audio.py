@@ -54,6 +54,7 @@ class AudioMetadata:
         duration = AudioMetadata.get_duration('/path/to/audio.mp3')
     """
 
+    _MAX_CACHE_SIZE = 500
     _cache: Dict[str, Tuple[float, float]] = {}  # path -> (duration, mtime)
 
     @classmethod
@@ -82,6 +83,9 @@ class AudioMetadata:
         duration = get_audio_duration(path)
         if duration is not None:
             cls._cache[path] = (duration, mtime)
+            # Evict oldest entries if cache exceeds max size
+            while len(cls._cache) > cls._MAX_CACHE_SIZE:
+                cls._cache.pop(next(iter(cls._cache)))
 
         return duration
 

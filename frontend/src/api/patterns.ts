@@ -1,4 +1,4 @@
-import { apiRequest } from './client';
+import { apiRequest, buildQueryString } from './client';
 
 export interface AdPattern {
   id: number;
@@ -85,16 +85,14 @@ export async function getPatterns(params?: {
   network_id?: string;
   active?: boolean;
 }): Promise<AdPattern[]> {
-  const searchParams = new URLSearchParams();
-  if (params?.scope) searchParams.set('scope', params.scope);
-  if (params?.podcast_id) searchParams.set('podcast_id', params.podcast_id);
-  if (params?.network_id) searchParams.set('network_id', params.network_id);
-  if (params?.active !== undefined) searchParams.set('active', String(params.active));
+  const qs = buildQueryString({
+    scope: params?.scope,
+    podcast_id: params?.podcast_id,
+    network_id: params?.network_id,
+    active: params?.active,
+  });
 
-  const queryString = searchParams.toString();
-  const url = queryString ? `/patterns?${queryString}` : '/patterns';
-
-  const response = await apiRequest<{ patterns: AdPattern[] }>(url);
+  const response = await apiRequest<{ patterns: AdPattern[] }>(`/patterns${qs}`);
   return response.patterns;
 }
 

@@ -1,22 +1,15 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useTranscriptKeyboard } from '../hooks/useTranscriptKeyboard';
-import { X, Check, RotateCcw, Save, Play, Pause, ChevronLeft, ChevronRight, Minus, Plus } from 'lucide-react';
-import PatternLink from './PatternLink';
-
-// Save status for visual feedback
-type SaveStatus = 'idle' | 'saving' | 'success' | 'error';
-
-interface DetectedAd {
-  start: number;
-  end: number;
-  confidence: number;
-  reason: string;
-  sponsor?: string;
-  pattern_id?: number;
-  detection_stage?: string;
-  scope?: string;
-  network_id?: string;
-}
+import {
+  AdHeader,
+  AdSelector,
+  ReasonPanel,
+  AudioPlayer,
+  BoundaryControls,
+  ActionButtons,
+  MobileAudioSheet,
+} from './ad-editor';
+import type { DetectedAd, AdCorrection, SaveStatus } from './ad-editor';
 
 interface AdEditorProps {
   detectedAds: DetectedAd[];
@@ -30,20 +23,8 @@ interface AdEditorProps {
   onSelectedAdIndexChange?: (index: number) => void;
 }
 
-export interface AdCorrection {
-  type: 'confirm' | 'reject' | 'adjust';
-  originalAd: DetectedAd;
-  adjustedStart?: number;
-  adjustedEnd?: number;
-  notes?: string;
-}
-
-function formatTime(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
-}
-
+// Re-export types for consumers
+export type { AdCorrection };
 
 export function AdEditor({
   detectedAds,
@@ -71,9 +52,9 @@ export function AdEditor({
       setInternalSelectedAdIndex(index);
     }
   }, [onSelectedAdIndexChange]);
+
   const [adjustedStart, setAdjustedStart] = useState(0);
   const [adjustedEnd, setAdjustedEnd] = useState(0);
-  // Relative adjustments in seconds (negative = earlier, positive = later)
   const [startAdjustment, setStartAdjustment] = useState(0);
   const [endAdjustment, setEndAdjustment] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -92,8 +73,7 @@ export function AdEditor({
     }
   }, []);
 
-  const NUDGE_AMOUNT = 0.5; // seconds
-
+  const NUDGE_AMOUNT = 0.5;
   const selectedAd = detectedAds[selectedAdIndex];
 
   // Initialize adjusted bounds and seek audio when ad changes
@@ -101,10 +81,8 @@ export function AdEditor({
     if (selectedAd) {
       setAdjustedStart(selectedAd.start);
       setAdjustedEnd(selectedAd.end);
-      // Reset relative adjustments
       setStartAdjustment(0);
       setEndAdjustment(0);
-      // Seek audio to the new ad's start time
       if (audioRef.current) {
         audioRef.current.currentTime = selectedAd.start;
       }
@@ -134,7 +112,6 @@ export function AdEditor({
   // Handle initial seek time (from Jump button)
   useEffect(() => {
     if (initialSeekTime !== undefined && audioRef.current) {
-      // Find the ad that contains this time (with tolerance for floating-point precision)
       const adIndex = detectedAds.findIndex(
         (ad) => Math.abs(initialSeekTime - ad.start) < 0.5 ||
                 (initialSeekTime > ad.start && initialSeekTime <= ad.end)
@@ -142,9 +119,7 @@ export function AdEditor({
       if (adIndex !== -1) {
         setSelectedAdIndex(adIndex);
       }
-      // Seek to the time
       audioRef.current.currentTime = initialSeekTime;
-      // Preserve this seek position so play doesn't reset it
       setPreserveSeekPosition(true);
     }
   }, [initialSeekTime, detectedAds]);
@@ -163,7 +138,6 @@ export function AdEditor({
   }, [triggerHaptic]);
 
   // Navigate to previous/next ad (for swipe gestures)
-  // Uses ref to avoid stale closure with controlled state
   const goToPreviousAd = useCallback(() => {
     const currentIndex = selectedAdIndexRef.current;
     if (currentIndex > 0) {
@@ -185,11 +159,9 @@ export function AdEditor({
     if (isPlaying) {
       audio.pause();
     } else {
-      // Only reset to ad start if not preserving a jump position AND outside ad bounds
       if (!preserveSeekPosition && (currentTime < adjustedStart || currentTime > adjustedEnd)) {
         audio.currentTime = adjustedStart;
       }
-      // Clear the preserve flag after use
       setPreserveSeekPosition(false);
       audio.play();
     }
@@ -229,7 +201,6 @@ export function AdEditor({
       adjustedEnd: hasChanges ? adjustedEnd : undefined,
     });
 
-    // Move to next ad
     if (selectedAdIndex < detectedAds.length - 1) {
       setSelectedAdIndex(selectedAdIndex + 1);
     }
@@ -285,7 +256,6 @@ export function AdEditor({
     }
   };
 
-  // Handle click on progress bar to seek
   const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
@@ -294,7 +264,6 @@ export function AdEditor({
     seekTo(percentage * duration);
   };
 
-  // Draggable progress bar handlers
   const handleProgressDragStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
     setIsDraggingProgress(true);
     triggerHaptic('light');
@@ -318,7 +287,21 @@ export function AdEditor({
     setIsDraggingProgress(false);
   }, []);
 
-  // Get button text based on save status
+  // Boundary adjustment handlers (unified for all variants)
+  const handleStartAdjustmentChange = useCallback((newAdj: number) => {
+    setStartAdjustment(newAdj);
+    const newStart = Math.max(0, (selectedAd?.start || 0) + newAdj);
+    setAdjustedStart(newStart);
+  }, [selectedAd]);
+
+  const handleEndAdjustmentChange = useCallback((newAdj: number) => {
+    setEndAdjustment(newAdj);
+    const maxEnd = audioDuration || 9999;
+    const newEnd = Math.min(maxEnd, (selectedAd?.end || 0) + newAdj);
+    setAdjustedEnd(newEnd);
+  }, [selectedAd, audioDuration]);
+
+  // Button text helpers
   const getSaveButtonText = () => {
     switch (saveStatus) {
       case 'saving': return 'Saving...';
@@ -362,659 +345,96 @@ export function AdEditor({
     >
       {/* TOP: Header + Ad Selector */}
       <div className="bg-card flex-shrink-0">
-        {/* Header */}
-        <div className="flex items-center justify-between px-3 sm:px-4 py-2.5 sm:py-3 border-b border-border">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="text-sm font-medium">
-              Ad {selectedAdIndex + 1} of {detectedAds.length}
-            </h3>
-            {selectedAd.sponsor && (
-              <span className="px-2 py-0.5 text-xs bg-primary/10 text-primary rounded">
-                {selectedAd.sponsor}
-              </span>
-            )}
-            {selectedAd.scope && (
-              <span className={`px-2 py-0.5 text-xs rounded ${
-                selectedAd.scope === 'global'
-                  ? 'bg-blue-500/20 text-blue-600 dark:text-blue-400'
-                  : selectedAd.scope === 'network'
-                  ? 'bg-purple-500/20 text-purple-600 dark:text-purple-400'
-                  : 'bg-green-500/20 text-green-600 dark:text-green-400'
-              }`}>
-                {selectedAd.scope === 'global' ? 'Global' :
-                 selectedAd.scope === 'network' ? `Network: ${selectedAd.network_id || '?'}` :
-                 'Podcast'}
-              </span>
-            )}
-            {selectedAd.detection_stage && (
-              <span className="px-2 py-0.5 text-xs bg-muted text-muted-foreground rounded">
-                {(() => {
-                  switch (selectedAd.detection_stage) {
-                    case 'fingerprint': return 'Fingerprint';
-                    case 'text_pattern': return 'Pattern';
-                    case 'verification': return 'Pass 2';
-                    case 'language': return 'Language';
-                    default: return 'Pass 1';
-                  }
-                })()}
-              </span>
-            )}
-          </div>
-          {onClose && (
-            <button
-              onClick={onClose}
-              className="text-muted-foreground hover:text-foreground"
-              aria-label="Close"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          )}
-        </div>
-        {/* Ad selector pills - all viewports */}
-        <div className="flex gap-2 px-3 sm:px-4 py-1.5 sm:py-2 border-b border-border overflow-x-auto scroll-smooth touch-pan-x">
-          {detectedAds.map((ad, index) => (
-            <button
-              key={index}
-              onClick={() => handleAdSelect(index)}
-              className={`px-4 py-3 sm:px-3 sm:py-1.5 text-sm sm:text-xs rounded-lg whitespace-nowrap touch-manipulation min-h-[44px] sm:min-h-0 active:scale-95 transition-all ${
-                index === selectedAdIndex
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted hover:bg-accent active:bg-accent/80'
-              }`}
-            >
-              {formatTime(ad.start)}
-            </button>
-          ))}
-        </div>
+        <AdHeader
+          selectedAdIndex={selectedAdIndex}
+          totalAds={detectedAds.length}
+          selectedAd={selectedAd}
+          onClose={onClose}
+        />
+        <AdSelector
+          detectedAds={detectedAds}
+          selectedAdIndex={selectedAdIndex}
+          onAdSelect={handleAdSelect}
+        />
       </div>
 
-      {/* Reason panel - inline, no stretch */}
-      <div className="px-3 sm:px-4 py-3 sm:py-4 min-h-0 overflow-y-auto">
-        <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">Why this was flagged</h4>
-        {selectedAd.reason ? (
-          <p className="text-sm text-foreground break-words mb-4">
-            <PatternLink reason={selectedAd.reason} />
-          </p>
-        ) : (
-          <p className="text-sm text-muted-foreground italic mb-4">No reason provided</p>
-        )}
-        <div className="flex flex-wrap gap-4 text-sm">
-          <div>
-            <span className="text-xs text-muted-foreground">Confidence</span>
-            <p className="font-medium">{Math.round(selectedAd.confidence * 100)}%</p>
-          </div>
-          {selectedAd.detection_stage && (
-            <div>
-              <span className="text-xs text-muted-foreground">Detection stage</span>
-              <p className="font-medium">
-                {(() => {
-                  switch (selectedAd.detection_stage) {
-                    case 'fingerprint': return 'Fingerprint';
-                    case 'text_pattern': return 'Pattern';
-                    case 'verification': return 'Pass 2';
-                    case 'language': return 'Language';
-                    default: return 'Pass 1';
-                  }
-                })()}
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
+      {/* Reason panel */}
+      <ReasonPanel selectedAd={selectedAd} />
 
       {/* Desktop bottom bar */}
       <div className="hidden sm:block bg-card border-t border-border flex-shrink-0">
-        {/* Audio player */}
         {audioUrl && (
-          <div className="px-4 py-3 border-b border-border">
-            <audio ref={audioRef} src={audioUrl} className="hidden" />
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handlePlayPause}
-                className="p-2 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80 touch-manipulation"
-                aria-label={isPlaying ? 'Pause' : 'Play'}
-              >
-                {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
-              </button>
-              <span className="text-sm font-mono w-12">{formatTime(currentTime)}</span>
-              <div
-                className="flex-1 h-2 bg-muted rounded-full overflow-hidden cursor-pointer hover:h-3 transition-all"
-                onClick={handleProgressClick}
-              >
-                <div
-                  className="h-full bg-primary pointer-events-none"
-                  style={{ width: `${(currentTime / (audioDuration || 1)) * 100}%` }}
-                />
-              </div>
-            </div>
-          </div>
+          <AudioPlayer
+            audioUrl={audioUrl}
+            audioRef={audioRef}
+            isPlaying={isPlaying}
+            currentTime={currentTime}
+            audioDuration={audioDuration}
+            onPlayPause={handlePlayPause}
+            onProgressClick={handleProgressClick}
+          />
         )}
 
-        {/* Time controls + display */}
-        <div className="px-4 py-3 border-b border-border bg-muted/30">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              {/* Start Adjustment */}
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Start</span>
-                <div className="flex items-center rounded-lg bg-muted overflow-hidden">
-                  <button
-                    onClick={() => {
-                      const newAdj = startAdjustment - 1;
-                      setStartAdjustment(newAdj);
-                      const newStart = Math.max(0, (selectedAd?.start || 0) + newAdj);
-                      setAdjustedStart(newStart);
-                      triggerHaptic();
-                    }}
-                    className="px-2.5 py-2 hover:bg-accent active:bg-accent/80 active:scale-95 transition-all text-foreground"
-                    aria-label="Decrease start adjustment"
-                  >
-                    <Minus className="w-4 h-4" />
-                  </button>
-                  <div className="relative flex items-center border-x border-border/50">
-                    <input
-                      type="number"
-                      value={startAdjustment}
-                      onChange={(e) => {
-                        const val = parseFloat(e.target.value) || 0;
-                        setStartAdjustment(val);
-                        const newStart = Math.max(0, (selectedAd?.start || 0) + val);
-                        setAdjustedStart(newStart);
-                      }}
-                      className="w-12 text-center text-sm font-mono font-medium bg-transparent pr-3 py-1.5 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                      step="1"
-                    />
-                    <span className="absolute right-1 text-[10px] text-muted-foreground pointer-events-none">s</span>
-                  </div>
-                  <button
-                    onClick={() => {
-                      const newAdj = startAdjustment + 1;
-                      setStartAdjustment(newAdj);
-                      const newStart = Math.max(0, (selectedAd?.start || 0) + newAdj);
-                      setAdjustedStart(newStart);
-                      triggerHaptic();
-                    }}
-                    className="px-2.5 py-2 hover:bg-accent active:bg-accent/80 active:scale-95 transition-all text-foreground"
-                    aria-label="Increase start adjustment"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-              {/* End Adjustment */}
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">End</span>
-                <div className="flex items-center rounded-lg bg-muted overflow-hidden">
-                  <button
-                    onClick={() => {
-                      const newAdj = endAdjustment - 1;
-                      setEndAdjustment(newAdj);
-                      const maxEnd = audioDuration || 9999;
-                      const newEnd = Math.min(maxEnd, (selectedAd?.end || 0) + newAdj);
-                      setAdjustedEnd(newEnd);
-                      triggerHaptic();
-                    }}
-                    className="px-2.5 py-2 hover:bg-accent active:bg-accent/80 active:scale-95 transition-all text-foreground"
-                    aria-label="Decrease end adjustment"
-                  >
-                    <Minus className="w-4 h-4" />
-                  </button>
-                  <div className="relative flex items-center border-x border-border/50">
-                    <input
-                      type="number"
-                      value={endAdjustment}
-                      onChange={(e) => {
-                        const val = parseFloat(e.target.value) || 0;
-                        setEndAdjustment(val);
-                        const maxEnd = audioDuration || 9999;
-                        const newEnd = Math.min(maxEnd, (selectedAd?.end || 0) + val);
-                        setAdjustedEnd(newEnd);
-                      }}
-                      className="w-12 text-center text-sm font-mono font-medium bg-transparent pr-3 py-1.5 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                      step="1"
-                    />
-                    <span className="absolute right-1 text-[10px] text-muted-foreground pointer-events-none">s</span>
-                  </div>
-                  <button
-                    onClick={() => {
-                      const newAdj = endAdjustment + 1;
-                      setEndAdjustment(newAdj);
-                      const maxEnd = audioDuration || 9999;
-                      const newEnd = Math.min(maxEnd, (selectedAd?.end || 0) + newAdj);
-                      setAdjustedEnd(newEnd);
-                      triggerHaptic();
-                    }}
-                    className="px-2.5 py-2 hover:bg-accent active:bg-accent/80 active:scale-95 transition-all text-foreground"
-                    aria-label="Increase end adjustment"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            </div>
-            {/* Time display */}
-            <div className="text-xs text-muted-foreground text-right">
-              <span className="font-mono">
-                {formatTime(adjustedStart)} - {formatTime(adjustedEnd)}
-              </span>
-              <span className="ml-2">
-                ({formatTime(adjustedEnd - adjustedStart)})
-              </span>
-              {(startAdjustment !== 0 || endAdjustment !== 0) && (
-                <span className="ml-2 text-primary font-mono">
-                  was {formatTime(selectedAd.start)} - {formatTime(selectedAd.end)}
-                </span>
-              )}
-            </div>
-          </div>
-          {/* Keyboard shortcuts hint */}
-          <div className="mt-2 text-xs text-muted-foreground">
-            <span className="font-mono">Space</span> play/pause{' '}
-            <span className="font-mono">J/K</span> nudge end{' '}
-            <span className="font-mono">Shift+J/K</span> nudge start{' '}
-            <span className="font-mono">C</span> confirm{' '}
-            <span className="font-mono">X</span> reject{' '}
-            <span className="font-mono">Esc</span> reset
-          </div>
-        </div>
+        <BoundaryControls
+          variant="desktop"
+          selectedAd={selectedAd}
+          adjustedStart={adjustedStart}
+          adjustedEnd={adjustedEnd}
+          startAdjustment={startAdjustment}
+          endAdjustment={endAdjustment}
+          onStartAdjustmentChange={handleStartAdjustmentChange}
+          onEndAdjustmentChange={handleEndAdjustmentChange}
+          triggerHaptic={() => triggerHaptic()}
+        />
 
-        {/* Action buttons */}
-        <div className="flex items-center justify-between gap-3 px-4 py-3 bg-muted/30">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleReset}
-              disabled={saveStatus === 'saving'}
-              className="px-4 py-2 text-sm font-medium rounded-lg border border-border bg-background hover:bg-accent disabled:opacity-50 transition-colors"
-            >
-              Reset
-            </button>
-            <button
-              onClick={handleConfirm}
-              disabled={saveStatus === 'saving'}
-              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                saveStatus === 'saving'
-                  ? 'bg-green-600/50 cursor-wait'
-                  : saveStatus === 'success'
-                  ? 'bg-green-600'
-                  : 'bg-green-600 hover:bg-green-700'
-              } text-white`}
-            >
-              {getConfirmButtonText()}
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saveStatus === 'saving'}
-              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                saveStatus === 'saving'
-                  ? 'bg-primary/50 cursor-wait'
-                  : 'bg-primary hover:bg-primary/90'
-              } text-primary-foreground`}
-            >
-              {getSaveButtonText()}
-            </button>
-          </div>
-          <button
-            onClick={handleReject}
-            disabled={saveStatus === 'saving'}
-            className={`px-6 py-2.5 text-sm font-semibold rounded-lg transition-colors ${
-              saveStatus === 'saving' ? 'bg-destructive/50 cursor-wait' : 'bg-destructive hover:bg-destructive/90 shadow-sm'
-            } text-destructive-foreground`}
-          >
-            {getRejectButtonText()}
-          </button>
-        </div>
+        <ActionButtons
+          variant="desktop"
+          saveStatus={saveStatus}
+          onSave={handleSave}
+          onConfirm={handleConfirm}
+          onReject={handleReject}
+          onReset={handleReset}
+          getSaveButtonText={getSaveButtonText}
+          getConfirmButtonText={getConfirmButtonText}
+          getRejectButtonText={getRejectButtonText}
+        />
       </div>
 
       {/* Mobile: Bottom sheet audio player */}
-      <div className="sm:hidden bg-card border-t border-border flex-shrink-0">
-        <audio ref={audioRef} src={audioUrl} className="hidden" />
-
-        {/* Grab handle */}
-        <button
-          onClick={() => setAudioSheetExpanded(!audioSheetExpanded)}
-          className="w-full flex justify-center py-1.5 touch-manipulation"
-        >
-          <div className="w-10 h-1 bg-muted-foreground/30 rounded-full" />
-        </button>
-
-        {/* Mini player (collapsed) */}
-        {!audioSheetExpanded && (
-          <div className="px-3 pb-3 space-y-2">
-            {/* Progress bar - full width, above controls */}
-            <div
-              ref={progressBarRef}
-              className={`relative bg-muted rounded-full cursor-pointer touch-manipulation transition-all ${isDraggingProgress ? 'h-5' : 'h-2'}`}
-              onClick={handleProgressClick}
-              onTouchStart={handleProgressDragStart}
-              onTouchMove={handleProgressDrag}
-              onTouchEnd={handleProgressDragEnd}
-            >
-              <div
-                className="absolute top-0 left-0 h-full bg-primary rounded-full pointer-events-none"
-                style={{ width: `${(currentTime / (audioDuration || 1)) * 100}%` }}
-              />
-              <div
-                className={`absolute top-1/2 -translate-y-1/2 bg-primary rounded-full shadow-md transition-all pointer-events-none ${isDraggingProgress ? 'w-6 h-6' : 'w-3 h-3'}`}
-                style={{ left: `calc(${(currentTime / (audioDuration || 1)) * 100}% - ${isDraggingProgress ? '12px' : '6px'})` }}
-              />
-            </div>
-            {/* Play + time display row */}
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handlePlayPause}
-                className="p-2 rounded-full bg-primary text-primary-foreground active:scale-95 touch-manipulation flex items-center justify-center transition-all flex-shrink-0"
-                aria-label={isPlaying ? 'Pause' : 'Play'}
-              >
-                {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
-              </button>
-              <span className="text-xs font-mono text-muted-foreground">{formatTime(currentTime)}</span>
-              <span className="text-xs text-muted-foreground mx-auto font-mono">
-                {formatTime(adjustedStart)} - {formatTime(adjustedEnd)} ({formatTime(adjustedEnd - adjustedStart)})
-              </span>
-            </div>
-            {/* Time controls - each gets a full row */}
-            <div className="space-y-1.5">
-              {/* Start row */}
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide w-10 flex-shrink-0">Start</span>
-                <div className="flex-1 flex items-center rounded-lg bg-muted overflow-hidden h-10">
-                  <button
-                    onClick={() => {
-                      const newAdj = startAdjustment - 1;
-                      setStartAdjustment(newAdj);
-                      const newStart = Math.max(0, (selectedAd?.start || 0) + newAdj);
-                      setAdjustedStart(newStart);
-                      triggerHaptic();
-                    }}
-                    className="px-4 h-full active:bg-accent/80 active:scale-95 touch-manipulation flex items-center justify-center transition-all text-foreground"
-                    aria-label="Decrease start adjustment"
-                  >
-                    <Minus className="w-4 h-4" />
-                  </button>
-                  <div className="relative flex-1 flex items-center justify-center border-x border-border/40 h-full">
-                    <input
-                      type="number"
-                      value={startAdjustment}
-                      onChange={(e) => {
-                        const val = parseFloat(e.target.value) || 0;
-                        setStartAdjustment(val);
-                        const newStart = Math.max(0, (selectedAd?.start || 0) + val);
-                        setAdjustedStart(newStart);
-                      }}
-                      className="w-full text-center text-base font-mono font-medium bg-transparent focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                      step="1"
-                    />
-                    <span className="absolute right-2 text-xs text-muted-foreground pointer-events-none">s</span>
-                  </div>
-                  <button
-                    onClick={() => {
-                      const newAdj = startAdjustment + 1;
-                      setStartAdjustment(newAdj);
-                      const newStart = Math.max(0, (selectedAd?.start || 0) + newAdj);
-                      setAdjustedStart(newStart);
-                      triggerHaptic();
-                    }}
-                    className="px-4 h-full active:bg-accent/80 active:scale-95 touch-manipulation flex items-center justify-center transition-all text-foreground"
-                    aria-label="Increase start adjustment"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-              {/* End row */}
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide w-10 flex-shrink-0">End</span>
-                <div className="flex-1 flex items-center rounded-lg bg-muted overflow-hidden h-10">
-                  <button
-                    onClick={() => {
-                      const newAdj = endAdjustment - 1;
-                      setEndAdjustment(newAdj);
-                      const maxEnd = audioDuration || 9999;
-                      const newEnd = Math.min(maxEnd, (selectedAd?.end || 0) + newAdj);
-                      setAdjustedEnd(newEnd);
-                      triggerHaptic();
-                    }}
-                    className="px-4 h-full active:bg-accent/80 active:scale-95 touch-manipulation flex items-center justify-center transition-all text-foreground"
-                    aria-label="Decrease end adjustment"
-                  >
-                    <Minus className="w-4 h-4" />
-                  </button>
-                  <div className="relative flex-1 flex items-center justify-center border-x border-border/40 h-full">
-                    <input
-                      type="number"
-                      value={endAdjustment}
-                      onChange={(e) => {
-                        const val = parseFloat(e.target.value) || 0;
-                        setEndAdjustment(val);
-                        const maxEnd = audioDuration || 9999;
-                        const newEnd = Math.min(maxEnd, (selectedAd?.end || 0) + val);
-                        setAdjustedEnd(newEnd);
-                      }}
-                      className="w-full text-center text-base font-mono font-medium bg-transparent focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                      step="1"
-                    />
-                    <span className="absolute right-2 text-xs text-muted-foreground pointer-events-none">s</span>
-                  </div>
-                  <button
-                    onClick={() => {
-                      const newAdj = endAdjustment + 1;
-                      setEndAdjustment(newAdj);
-                      const maxEnd = audioDuration || 9999;
-                      const newEnd = Math.min(maxEnd, (selectedAd?.end || 0) + newAdj);
-                      setAdjustedEnd(newEnd);
-                      triggerHaptic();
-                    }}
-                    className="px-4 h-full active:bg-accent/80 active:scale-95 touch-manipulation flex items-center justify-center transition-all text-foreground"
-                    aria-label="Increase end adjustment"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            </div>
-            {/* Action buttons - full width row */}
-            <div className="flex items-center gap-1.5 pt-0.5">
-              <button
-                onClick={handleReject}
-                disabled={saveStatus === 'saving'}
-                className={`flex-1 py-2.5 rounded-lg touch-manipulation active:scale-95 transition-all flex items-center justify-center gap-1 text-xs font-medium ${
-                  saveStatus === 'saving' ? 'bg-destructive/50 cursor-wait' : saveStatus === 'success' ? 'bg-green-600 text-white' : saveStatus === 'error' ? 'bg-red-600 text-white' : 'bg-destructive/10 text-destructive active:bg-destructive/20'
-                }`}
-                title="Not an Ad"
-              >
-                <X className="w-3.5 h-3.5" />
-                Not Ad
-              </button>
-              <button
-                onClick={handleReset}
-                disabled={saveStatus === 'saving'}
-                className="flex-1 py-2.5 rounded-lg bg-muted touch-manipulation active:scale-95 active:bg-accent transition-all flex items-center justify-center gap-1 text-xs font-medium disabled:opacity-50"
-                title="Reset"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                Reset
-              </button>
-              <button
-                onClick={handleConfirm}
-                disabled={saveStatus === 'saving'}
-                className={`flex-1 py-2.5 rounded-lg touch-manipulation active:scale-95 transition-all flex items-center justify-center gap-1 text-xs font-medium ${
-                  saveStatus === 'saving' ? 'bg-green-600/50 cursor-wait' : saveStatus === 'success' ? 'bg-green-600' : saveStatus === 'error' ? 'bg-red-600' : 'bg-green-600 text-white active:bg-green-700'
-                }`}
-                title="Confirm"
-              >
-                <Check className="w-3.5 h-3.5" />
-                Confirm
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={saveStatus === 'saving'}
-                className={`flex-1 py-2.5 rounded-lg touch-manipulation active:scale-95 transition-all flex items-center justify-center gap-1 text-xs font-medium ${
-                  saveStatus === 'saving' ? 'bg-primary/50 cursor-wait' : saveStatus === 'success' ? 'bg-green-600 text-white' : saveStatus === 'error' ? 'bg-red-600 text-white' : 'bg-primary text-primary-foreground active:bg-primary/90'
-                }`}
-                title="Save Adjusted"
-              >
-                <Save className="w-3.5 h-3.5" />
-                Save
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Expanded player */}
-        {audioSheetExpanded && (
-          <div className="px-4 pb-4 space-y-4">
-            {/* Large progress bar */}
-            <div
-              ref={progressBarRef}
-              className={`relative bg-muted rounded-full cursor-pointer touch-manipulation transition-all ${isDraggingProgress ? 'h-6' : 'h-5'}`}
-              onClick={handleProgressClick}
-              onTouchStart={handleProgressDragStart}
-              onTouchMove={handleProgressDrag}
-              onTouchEnd={handleProgressDragEnd}
-            >
-              <div
-                className="absolute top-0 left-0 h-full bg-primary rounded-full pointer-events-none"
-                style={{ width: `${(currentTime / (audioDuration || 1)) * 100}%` }}
-              />
-              <div
-                className={`absolute top-1/2 -translate-y-1/2 bg-primary rounded-full shadow-md transition-all pointer-events-none ${isDraggingProgress ? 'w-7 h-7' : 'w-5 h-5'}`}
-                style={{ left: `calc(${(currentTime / (audioDuration || 1)) * 100}% - ${isDraggingProgress ? '14px' : '10px'})` }}
-              />
-            </div>
-
-            {/* Time display */}
-            <div className="flex justify-between text-sm text-muted-foreground font-mono">
-              <span>{formatTime(currentTime)}</span>
-              <span>{formatTime(audioDuration || 0)}</span>
-            </div>
-
-            {/* Large play controls */}
-            <div className="flex items-center justify-center gap-4">
-              <button onClick={goToPreviousAd} className="p-3 rounded-full bg-muted active:bg-accent touch-manipulation min-w-[48px] min-h-[48px] flex items-center justify-center active:scale-95 transition-all">
-                <ChevronLeft className="w-6 h-6" />
-              </button>
-              <button
-                onClick={handlePlayPause}
-                className="p-4 rounded-full bg-primary text-primary-foreground active:scale-95 touch-manipulation min-w-[64px] min-h-[64px] flex items-center justify-center transition-all"
-              >
-                {isPlaying ? <Pause className="w-8 h-8" /> : <Play className="w-8 h-8" />}
-              </button>
-              <button onClick={goToNextAd} className="p-3 rounded-full bg-muted active:bg-accent touch-manipulation min-w-[48px] min-h-[48px] flex items-center justify-center active:scale-95 transition-all">
-                <ChevronRight className="w-6 h-6" />
-              </button>
-            </div>
-
-            {/* Time controls in expanded mode */}
-            <div className="flex items-center gap-2">
-              <div className="flex-1 flex items-center gap-1.5">
-                <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide flex-shrink-0">Start</span>
-                <div className="flex-1 flex items-center rounded-lg bg-muted overflow-hidden">
-                  <button
-                    onClick={() => {
-                      const newAdj = startAdjustment - 1;
-                      setStartAdjustment(newAdj);
-                      const newStart = Math.max(0, (selectedAd?.start || 0) + newAdj);
-                      setAdjustedStart(newStart);
-                      triggerHaptic();
-                    }}
-                    className="px-3 py-2.5 active:bg-accent/80 active:scale-95 touch-manipulation min-w-[40px] min-h-[40px] flex items-center justify-center transition-all text-foreground"
-                    aria-label="Decrease start adjustment"
-                  >
-                    <Minus className="w-4 h-4" />
-                  </button>
-                  <div className="relative flex-1 flex items-center justify-center border-x border-border/40">
-                    <input
-                      type="number"
-                      value={startAdjustment}
-                      onChange={(e) => {
-                        const val = parseFloat(e.target.value) || 0;
-                        setStartAdjustment(val);
-                        const newStart = Math.max(0, (selectedAd?.start || 0) + val);
-                        setAdjustedStart(newStart);
-                      }}
-                      className="w-full text-center text-sm font-mono font-medium bg-transparent py-1.5 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                      step="1"
-                    />
-                    <span className="absolute right-1 text-[10px] text-muted-foreground pointer-events-none">s</span>
-                  </div>
-                  <button
-                    onClick={() => {
-                      const newAdj = startAdjustment + 1;
-                      setStartAdjustment(newAdj);
-                      const newStart = Math.max(0, (selectedAd?.start || 0) + newAdj);
-                      setAdjustedStart(newStart);
-                      triggerHaptic();
-                    }}
-                    className="px-3 py-2.5 active:bg-accent/80 active:scale-95 touch-manipulation min-w-[40px] min-h-[40px] flex items-center justify-center transition-all text-foreground"
-                    aria-label="Increase start adjustment"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-              <div className="flex-1 flex items-center gap-1.5">
-                <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide flex-shrink-0">End</span>
-                <div className="flex-1 flex items-center rounded-lg bg-muted overflow-hidden">
-                  <button
-                    onClick={() => {
-                      const newAdj = endAdjustment - 1;
-                      setEndAdjustment(newAdj);
-                      const maxEnd = audioDuration || 9999;
-                      const newEnd = Math.min(maxEnd, (selectedAd?.end || 0) + newAdj);
-                      setAdjustedEnd(newEnd);
-                      triggerHaptic();
-                    }}
-                    className="px-3 py-2.5 active:bg-accent/80 active:scale-95 touch-manipulation min-w-[40px] min-h-[40px] flex items-center justify-center transition-all text-foreground"
-                    aria-label="Decrease end adjustment"
-                  >
-                    <Minus className="w-4 h-4" />
-                  </button>
-                  <div className="relative flex-1 flex items-center justify-center border-x border-border/40">
-                    <input
-                      type="number"
-                      value={endAdjustment}
-                      onChange={(e) => {
-                        const val = parseFloat(e.target.value) || 0;
-                        setEndAdjustment(val);
-                        const maxEnd = audioDuration || 9999;
-                        const newEnd = Math.min(maxEnd, (selectedAd?.end || 0) + val);
-                        setAdjustedEnd(newEnd);
-                      }}
-                      className="w-full text-center text-sm font-mono font-medium bg-transparent py-1.5 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                      step="1"
-                    />
-                    <span className="absolute right-1 text-[10px] text-muted-foreground pointer-events-none">s</span>
-                  </div>
-                  <button
-                    onClick={() => {
-                      const newAdj = endAdjustment + 1;
-                      setEndAdjustment(newAdj);
-                      const maxEnd = audioDuration || 9999;
-                      const newEnd = Math.min(maxEnd, (selectedAd?.end || 0) + newAdj);
-                      setAdjustedEnd(newEnd);
-                      triggerHaptic();
-                    }}
-                    className="px-3 py-2.5 active:bg-accent/80 active:scale-95 touch-manipulation min-w-[40px] min-h-[40px] flex items-center justify-center transition-all text-foreground"
-                    aria-label="Increase end adjustment"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Action buttons with labels in expanded mode */}
-            <div className="flex items-center justify-center gap-2">
-              <button onClick={handleReject} disabled={saveStatus === 'saving'} className="flex-1 py-3 rounded-lg bg-destructive/10 text-destructive text-sm font-medium touch-manipulation active:scale-95 transition-all">Not Ad</button>
-              <button onClick={handleReset} disabled={saveStatus === 'saving'} className="flex-1 py-3 rounded-lg bg-muted text-sm font-medium touch-manipulation active:scale-95 transition-all">Reset</button>
-              <button onClick={handleConfirm} disabled={saveStatus === 'saving'} className="flex-1 py-3 rounded-lg bg-green-600 text-white text-sm font-medium touch-manipulation active:scale-95 transition-all">Confirm</button>
-              <button onClick={handleSave} disabled={saveStatus === 'saving'} className="flex-1 py-3 rounded-lg bg-primary text-primary-foreground text-sm font-medium touch-manipulation active:scale-95 transition-all">Save</button>
-            </div>
-          </div>
-        )}
-      </div>
+      <MobileAudioSheet
+        audioUrl={audioUrl}
+        audioRef={audioRef}
+        isPlaying={isPlaying}
+        currentTime={currentTime}
+        audioDuration={audioDuration}
+        adjustedStart={adjustedStart}
+        adjustedEnd={adjustedEnd}
+        startAdjustment={startAdjustment}
+        endAdjustment={endAdjustment}
+        selectedAd={selectedAd}
+        saveStatus={saveStatus}
+        audioSheetExpanded={audioSheetExpanded}
+        isDraggingProgress={isDraggingProgress}
+        progressBarRef={progressBarRef}
+        onToggleExpanded={() => setAudioSheetExpanded(!audioSheetExpanded)}
+        onPlayPause={handlePlayPause}
+        onProgressClick={handleProgressClick}
+        onProgressDragStart={handleProgressDragStart}
+        onProgressDrag={handleProgressDrag}
+        onProgressDragEnd={handleProgressDragEnd}
+        onStartAdjustmentChange={handleStartAdjustmentChange}
+        onEndAdjustmentChange={handleEndAdjustmentChange}
+        triggerHaptic={() => triggerHaptic()}
+        onSave={handleSave}
+        onConfirm={handleConfirm}
+        onReject={handleReject}
+        onReset={handleReset}
+        onGoToPreviousAd={goToPreviousAd}
+        onGoToNextAd={goToNextAd}
+        getSaveButtonText={getSaveButtonText}
+        getConfirmButtonText={getConfirmButtonText}
+        getRejectButtonText={getRejectButtonText}
+      />
     </div>
   );
 }

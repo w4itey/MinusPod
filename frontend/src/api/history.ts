@@ -1,4 +1,4 @@
-import { apiRequest } from './client';
+import { apiRequest, buildQueryString } from './client';
 import { ProcessingHistoryResponse, ProcessingHistoryStats } from './types';
 
 export interface HistoryQueryParams {
@@ -13,19 +13,16 @@ export interface HistoryQueryParams {
 export async function getProcessingHistory(
   params: HistoryQueryParams = {}
 ): Promise<ProcessingHistoryResponse> {
-  const queryParams = new URLSearchParams();
+  const qs = buildQueryString({
+    page: params.page,
+    limit: params.limit,
+    status: params.status,
+    podcast_slug: params.podcastSlug,
+    sort_by: params.sortBy,
+    sort_dir: params.sortDir,
+  });
 
-  if (params.page !== undefined) queryParams.set('page', String(params.page));
-  if (params.limit !== undefined) queryParams.set('limit', String(params.limit));
-  if (params.status) queryParams.set('status', params.status);
-  if (params.podcastSlug) queryParams.set('podcast_slug', params.podcastSlug);
-  if (params.sortBy) queryParams.set('sort_by', params.sortBy);
-  if (params.sortDir) queryParams.set('sort_dir', params.sortDir);
-
-  const queryString = queryParams.toString();
-  const endpoint = queryString ? `/history?${queryString}` : '/history';
-
-  return apiRequest<ProcessingHistoryResponse>(endpoint);
+  return apiRequest<ProcessingHistoryResponse>(`/history${qs}`);
 }
 
 export async function getProcessingHistoryStats(): Promise<ProcessingHistoryStats> {

@@ -7,7 +7,7 @@ import shutil
 from pathlib import Path
 from typing import List, Dict, Optional
 
-from utils.audio import get_audio_duration as _get_audio_duration
+from utils.audio import get_audio_duration
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +54,7 @@ class AudioProcessor:
 
         Delegates to utils.audio.get_audio_duration for consistent implementation.
         """
-        return _get_audio_duration(audio_path)
+        return get_audio_duration(audio_path)
 
     def get_beep_duration(self) -> float:
         """Get duration of beep audio (cached)."""

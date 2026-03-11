@@ -9,7 +9,7 @@ import requests
 from typing import List, Dict, Optional, Tuple
 from pathlib import Path
 
-from utils.audio import get_audio_duration as _get_audio_duration
+from utils.audio import get_audio_duration
 from utils.time import format_vtt_timestamp
 from utils.gpu import clear_gpu_memory, get_available_memory_gb, get_gpu_memory_info
 from utils.url import validate_url, SSRFError
@@ -557,7 +557,7 @@ class Transcriber:
 
         Delegates to utils.audio.get_audio_duration for consistent implementation.
         """
-        duration = _get_audio_duration(audio_path)
+        duration = get_audio_duration(audio_path)
         if duration is not None:
             logger.info(f"Audio duration: {duration:.1f}s ({duration/60:.1f} min)")
         return duration

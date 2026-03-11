@@ -13,8 +13,7 @@
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.22.0",
     "@tanstack/react-query": "^5.24.0",
-    "axios": "^1.6.7",
-    "lucide-react": "^0.344.0",
+"lucide-react": "^0.344.0",
     "clsx": "^2.1.0",
     "tailwind-merge": "^2.2.1"
   },
