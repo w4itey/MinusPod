@@ -6,6 +6,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.48] - 2026-03-11
+
+### Fixed
+- **Patterns page table overflow**: Switched to `table-fixed` layout with proportional `<colgroup>` widths so all 8 columns fit within the viewport without horizontal scrolling
+- **Long podcast names in Scope column**: Added truncation to podcast scope badges to prevent layout blowout
+- **Sponsor column overflow**: Added `overflow-hidden` and `truncate` to sponsor name and text template cells
+- **Column padding**: Tightened padding on narrow columns (ID, Confirmed, False Pos., Status) from `px-4` to `px-2`
+
 ## [1.0.47] - 2026-03-11
 
 ### Fixed
