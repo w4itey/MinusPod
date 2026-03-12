@@ -359,6 +359,7 @@ This is a comma-separated list of domains excluded from Audiobookshelf's SSRF fi
 | `OPENAI_API_KEY` | `not-needed` | API key for OpenAI-compatible endpoint (not required for Ollama or local wrappers) |
 | `OPENAI_MODEL` | _(none)_ | Model for OpenAI-compatible/Ollama providers. **Required for Ollama** (e.g. `qwen3:14b`). Defaults to `claude-sonnet-4-5-20250929` for wrapper mode if unset. |
 | `BASE_URL` | `http://localhost:8000` | Public URL for generated feed links |
+| `UI_BASE_URL` | _(falls back to BASE_URL)_ | Public URL for UI links in webhooks (set if UI is on a different domain than feeds) |
 | `WHISPER_MODEL` | `small` | Whisper model size (tiny/base/small/medium/large) |
 | `WHISPER_DEVICE` | `cuda` | Device for Whisper (cuda/cpu) |
 | `RETENTION_PERIOD` | `1440` | **Deprecated.** Legacy minutes-based retention (auto-converted to days on first startup). Use the Settings UI or `PUT /api/v1/settings/retention` instead. Retention now resets episodes to "discovered" instead of deleting them. |
@@ -592,21 +593,29 @@ Custom payload templates are Jinja2 strings rendered against these variables:
 
 ### Example: Pushover
 
-1. Create an application at pushover.net to get an app token
-2. Find your user key in the Pushover dashboard
-3. Add a webhook in Settings > Webhooks:
-   - **URL:** `https://api.pushover.net/1/messages.json`
-   - **Payload template:**
-     ```json
-     {
-       "token": "YOUR_APP_TOKEN",
-       "user": "YOUR_USER_KEY",
-       "title": "MinusPod: {{ episode.title }}",
-       "message": "Removed {{ episode.ads_removed }} ads in {{ '%02d:%02d' | format(episode.processing_time_secs | int // 60, episode.processing_time_secs | int % 60) }}. Saved {{ episode.time_saved_secs }}s. Cost ${{ '%.2f' % episode.llm_cost }}.\n{{ episode.url }}"
-     }
-     ```
+Pushover supports native webhook ingestion with data extraction selectors. No custom payload template needed -- MinusPod's default JSON payload works directly.
+
+1. Log in to [pushover.net/dashboard](https://pushover.net/dashboard), scroll to "Your Webhooks", click "Create a Webhook". Name it MinusPod.
+2. Copy the unique webhook URL.
+3. In MinusPod Settings > Webhooks: paste the URL, select events, **leave payload template blank**.
+4. Click Test in MinusPod to fire a sample payload to Pushover.
+5. In Pushover dashboard: click "Check for Update" in Last Payload to load MinusPod's JSON.
+6. Configure data extraction selectors:
+
+| Field | Selector |
+|---|---|
+| Title | `{{event}}` |
+| Body | `{{episode.title}}`<br>`{{episode.ads_removed}} ads removed. Saved {{episode.time_saved_secs}}s. Cost ${{episode.llm_cost}}` |
+| URL | `{{episode.url}}` |
+| URL Title | `Open in MinusPod` |
+
+7. Click "Test Selectors on Last Payload" to preview, then Save.
+
+> Pushover's `{{...}}` selector syntax is evaluated on Pushover's side -- these are not Jinja2 templates.
 
 ### Example: ntfy
+
+ntfy requires a custom payload template to match its expected JSON format.
 
 1. Self-hosted or ntfy.sh -- set your topic name
 2. Add a webhook in Settings > Webhooks:
@@ -616,10 +625,12 @@ Custom payload templates are Jinja2 strings rendered against these variables:
      {
        "topic": "your-topic",
        "title": "{{ episode.title }}",
-       "message": "Removed {{ episode.ads_removed }} ads -- {{ episode.time_saved_secs }}s saved",
+       "message": "Removed {{ episode.ads_removed }} ads in {{ '%02d:%02d' | format(episode.processing_time_secs | int // 60, episode.processing_time_secs | int % 60) }}. Cost ${{ '%.2f' % episode.llm_cost }}",
        "actions": [{"action": "view", "label": "Open Episode", "url": "{{ episode.url }}"}]
      }
      ```
+
+> ntfy also supports header-based delivery (`X-Title`, `X-Message`, `X-Click` headers with plain text body) -- either approach works with MinusPod's template system.
 
 When no custom template is configured, MinusPod sends its default JSON payload which works with custom scripts, n8n, Home Assistant webhooks, and other generic HTTP receivers.
 

@@ -60,7 +60,7 @@ class TestBuildContext:
             slug='my-pod',
             episode_title='My Episode',
             processing_time=30.0,
-            llm_cost=0.005,
+            llm_cost=0.1234,
             ads_removed=2,
             error_message=None,
             original_duration=600.0,
@@ -72,7 +72,7 @@ class TestBuildContext:
         assert ctx['episode']['slug'] == 'my-pod'
         assert ctx['episode']['ads_removed'] == 2
         assert ctx['episode']['processing_time_secs'] == 30.0
-        assert ctx['episode']['llm_cost'] == 0.005
+        assert ctx['episode']['llm_cost'] == 0.12  # rounded to 2 decimal places
         assert ctx['episode']['time_saved_secs'] == 100.0
         assert ctx['episode']['error_message'] is None
         assert 'timestamp' in ctx
@@ -94,8 +94,10 @@ class TestBuildContext:
         assert ctx['episode']['time_saved_secs'] is None
 
     def test_build_context_uses_base_url_env(self):
-        """BASE_URL env var is used in episode URL."""
-        with patch.dict(os.environ, {'BASE_URL': 'https://my-server:9000'}):
+        """BASE_URL env var is used in episode URL when UI_BASE_URL is not set."""
+        with patch.dict(os.environ, {'BASE_URL': 'https://my-server:9000'}, clear=False):
+            # Ensure UI_BASE_URL is not set
+            os.environ.pop('UI_BASE_URL', None)
             ctx = _build_context(
                 event=EVENT_EPISODE_PROCESSED,
                 episode_id='ep3',
@@ -109,6 +111,26 @@ class TestBuildContext:
                 new_duration=None,
             )
         assert ctx['episode']['url'] == 'https://my-server:9000/ui/feeds/slug1/episodes/ep3'
+
+    def test_build_context_ui_base_url_takes_priority(self):
+        """UI_BASE_URL takes priority over BASE_URL for episode URLs."""
+        with patch.dict(os.environ, {
+            'BASE_URL': 'https://feed.example.com',
+            'UI_BASE_URL': 'https://app.example.com',
+        }):
+            ctx = _build_context(
+                event=EVENT_EPISODE_PROCESSED,
+                episode_id='ep4',
+                slug='slug2',
+                episode_title='T',
+                processing_time=1.0,
+                llm_cost=0.0,
+                ads_removed=0,
+                error_message=None,
+                original_duration=None,
+                new_duration=None,
+            )
+        assert ctx['episode']['url'] == 'https://app.example.com/ui/feeds/slug2/episodes/ep4'
 
 
 # ---------------------------------------------------------------------------

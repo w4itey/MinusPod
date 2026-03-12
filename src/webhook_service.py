@@ -33,7 +33,7 @@ _DUMMY_CONTEXT = {
         'id': 'abc123',
         'title': 'Example Episode Title',
         'slug': 'example-podcast',
-        'url': 'http://localhost:8000/ui/feeds/example-podcast/episodes/abc123',
+        'url': 'http://your-server:8000/ui/feeds/example-podcast/episodes/abc123',
         'ads_removed': 3,
         'processing_time_secs': 42.5,
         'llm_cost': 0.0035,
@@ -47,11 +47,11 @@ def _build_context(event, episode_id, slug, episode_title, processing_time,
                    llm_cost, ads_removed, error_message, original_duration,
                    new_duration):
     """Build the template/payload context dict for a webhook event."""
-    base_url = os.environ.get('BASE_URL', 'http://localhost:8000')
-    episode_url = f"{base_url}/ui/feeds/{slug}/episodes/{episode_id}"
+    ui_base_url = os.environ.get('UI_BASE_URL') or os.environ.get('BASE_URL', 'http://localhost:8000')
+    episode_url = f"{ui_base_url}/ui/feeds/{slug}/episodes/{episode_id}"
 
     if original_duration is not None and new_duration is not None:
-        time_saved_secs = original_duration - new_duration
+        time_saved_secs = round(original_duration - new_duration, 2)
     else:
         time_saved_secs = None
 
@@ -66,8 +66,8 @@ def _build_context(event, episode_id, slug, episode_title, processing_time,
             'slug': slug,
             'url': episode_url,
             'ads_removed': ads_removed,
-            'processing_time_secs': processing_time,
-            'llm_cost': llm_cost,
+            'processing_time_secs': round(processing_time, 2) if processing_time is not None else None,
+            'llm_cost': round(llm_cost, 2) if llm_cost is not None else None,
             'time_saved_secs': time_saved_secs,
             'error_message': error_message,
         },
@@ -235,11 +235,14 @@ def fire_test_event(webhook_config):
     try:
         conn = db.get_connection()
         row = conn.execute(
-            """SELECT episode_id, podcast_slug, episode_title,
-                      processing_duration_seconds, llm_cost, ads_detected
-               FROM processing_history
-               WHERE status = 'completed'
-               ORDER BY processed_at DESC
+            """SELECT h.episode_id, h.podcast_slug, h.episode_title,
+                      h.processing_duration_seconds, h.llm_cost, h.ads_detected,
+                      e.original_duration, e.new_duration
+               FROM processing_history h
+               LEFT JOIN episodes e ON e.episode_id = h.episode_id
+                   AND e.podcast_slug = h.podcast_slug
+               WHERE h.status = 'completed'
+               ORDER BY h.processed_at DESC
                LIMIT 1"""
         ).fetchone()
         if row:
@@ -252,8 +255,8 @@ def fire_test_event(webhook_config):
                 llm_cost=row[4],
                 ads_removed=row[5],
                 error_message=None,
-                original_duration=None,
-                new_duration=None,
+                original_duration=row[6],
+                new_duration=row[7],
             )
     except Exception:
         logger.debug("Could not load real data for test webhook, using placeholders")
