@@ -16,6 +16,8 @@ from webhook_service import (
     render_template_preview,
     _build_context,
     _prepare_and_dispatch,
+    _format_duration,
+    _format_cost,
     load_webhooks,
     fire_event,
     _fire_event_sync,
@@ -72,8 +74,11 @@ class TestBuildContext:
         assert ctx['episode']['slug'] == 'my-pod'
         assert ctx['episode']['ads_removed'] == 2
         assert ctx['episode']['processing_time_secs'] == 30.0
+        assert ctx['episode']['processing_time'] == '0:30'
         assert ctx['episode']['llm_cost'] == 0.004123  # rounded to 6 decimal places
+        assert ctx['episode']['llm_cost_display'] == '$0.00'
         assert ctx['episode']['time_saved_secs'] == 100.0
+        assert ctx['episode']['time_saved'] == '1:40'
         assert ctx['episode']['error_message'] is None
         assert 'timestamp' in ctx
 
@@ -92,6 +97,9 @@ class TestBuildContext:
             new_duration=None,
         )
         assert ctx['episode']['time_saved_secs'] is None
+        assert ctx['episode']['time_saved'] is None
+        assert ctx['episode']['processing_time'] == '0:10'
+        assert ctx['episode']['llm_cost_display'] == '$0.00'
 
     def test_build_context_uses_base_url_env(self):
         """BASE_URL env var is used in episode URL when UI_BASE_URL is not set."""
@@ -139,8 +147,9 @@ class TestBuildContext:
 
 class TestPrepareAndDispatchSigning:
 
+    @patch('webhook_service.validate_url')
     @patch('webhook_service._dispatch_webhook', return_value=200)
-    def test_prepare_and_dispatch_with_secret(self, mock_dispatch):
+    def test_prepare_and_dispatch_with_secret(self, mock_dispatch, _mock_url):
         """X-MinusPod-Signature header is added when secret is set."""
         config = {'url': 'https://hook.example.com', 'secret': 'mysecret'}
         context = {'event': 'Episode Processed', 'episode': {}}
@@ -151,8 +160,9 @@ class TestPrepareAndDispatchSigning:
         assert 'X-MinusPod-Signature' in headers
         assert headers['X-MinusPod-Signature'].startswith('sha256=')
 
+    @patch('webhook_service.validate_url')
     @patch('webhook_service._dispatch_webhook', return_value=200)
-    def test_prepare_and_dispatch_no_secret(self, mock_dispatch):
+    def test_prepare_and_dispatch_no_secret(self, mock_dispatch, _mock_url):
         """No signature header when no secret."""
         config = {'url': 'https://hook.example.com'}
         context = {'event': 'Episode Processed', 'episode': {}}
@@ -162,6 +172,17 @@ class TestPrepareAndDispatchSigning:
         headers = args[2]
         assert 'X-MinusPod-Signature' not in headers
 
+    @patch('webhook_service._dispatch_webhook', return_value=200)
+    def test_prepare_and_dispatch_ssrf_blocked(self, mock_dispatch):
+        """SSRF check at dispatch time blocks private IPs."""
+        from utils.url import SSRFError
+        config = {'url': 'https://hook.example.com'}
+        context = {'event': 'Episode Processed', 'episode': {}}
+        with patch('webhook_service.validate_url', side_effect=SSRFError('Blocked private IP')):
+            result = _prepare_and_dispatch(config, context)
+        assert result is None
+        mock_dispatch.assert_not_called()
+
 
 # ---------------------------------------------------------------------------
 # Dispatch / payload tests
@@ -169,8 +190,9 @@ class TestPrepareAndDispatchSigning:
 
 class TestPrepareAndDispatchPayload:
 
+    @patch('webhook_service.validate_url')
     @patch('webhook_service._dispatch_webhook', return_value=200)
-    def test_prepare_and_dispatch_with_template(self, mock_dispatch):
+    def test_prepare_and_dispatch_with_template(self, mock_dispatch, _mock_url):
         """Renders template and dispatches."""
         config = {
             'url': 'https://hook.example.com',
@@ -183,8 +205,9 @@ class TestPrepareAndDispatchPayload:
         body_bytes = args[1]
         assert body_bytes == b'hello Episode Processed'
 
+    @patch('webhook_service.validate_url')
     @patch('webhook_service._dispatch_webhook', return_value=200)
-    def test_prepare_and_dispatch_default_payload(self, mock_dispatch):
+    def test_prepare_and_dispatch_default_payload(self, mock_dispatch, _mock_url):
         """Uses json.dumps of context when no template."""
         config = {'url': 'https://hook.example.com'}
         context = {'event': 'Episode Processed', 'data': 123}
@@ -196,8 +219,9 @@ class TestPrepareAndDispatchPayload:
         assert parsed['event'] == 'Episode Processed'
         assert parsed['data'] == 123
 
+    @patch('webhook_service.validate_url')
     @patch('webhook_service._dispatch_webhook', return_value=200)
-    def test_prepare_and_dispatch_test_flag_default(self, mock_dispatch):
+    def test_prepare_and_dispatch_test_flag_default(self, mock_dispatch, _mock_url):
         """test: true is in payload for default (no template) path."""
         config = {'url': 'https://hook.example.com'}
         context = {'event': 'Episode Processed'}
@@ -207,8 +231,9 @@ class TestPrepareAndDispatchPayload:
         parsed = json.loads(args[1])
         assert parsed['test'] is True
 
+    @patch('webhook_service.validate_url')
     @patch('webhook_service._dispatch_webhook', return_value=200)
-    def test_prepare_and_dispatch_test_flag_template(self, mock_dispatch):
+    def test_prepare_and_dispatch_test_flag_template(self, mock_dispatch, _mock_url):
         """test: true is available in context for the template path too."""
         config = {
             'url': 'https://hook.example.com',
@@ -286,3 +311,46 @@ class TestLoadWebhooks:
         mock_db.get_setting.return_value = json.dumps(webhooks)
         result = load_webhooks(db=mock_db)
         assert result == webhooks
+
+
+# ---------------------------------------------------------------------------
+# Formatting helper tests
+# ---------------------------------------------------------------------------
+
+class TestFormatDuration:
+
+    def test_seconds_only(self):
+        assert _format_duration(5) == '0:05'
+
+    def test_minutes_and_seconds(self):
+        assert _format_duration(187.0) == '3:07'
+
+    def test_exact_minute(self):
+        assert _format_duration(60) == '1:00'
+
+    def test_hours(self):
+        assert _format_duration(3661) == '1:01:01'
+
+    def test_none(self):
+        assert _format_duration(None) is None
+
+    def test_zero(self):
+        assert _format_duration(0) == '0:00'
+
+
+class TestFormatCost:
+
+    def test_small_cost(self):
+        assert _format_cost(0.0035) == '$0.00'
+
+    def test_normal_cost(self):
+        assert _format_cost(0.72) == '$0.72'
+
+    def test_whole_dollar(self):
+        assert _format_cost(1.0) == '$1.00'
+
+    def test_none(self):
+        assert _format_cost(None) is None
+
+    def test_zero(self):
+        assert _format_cost(0.0) == '$0.00'

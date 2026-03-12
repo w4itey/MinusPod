@@ -2,7 +2,6 @@
 import datetime
 import logging
 import os
-import io
 import sqlite3
 import tempfile
 import time
@@ -192,6 +191,8 @@ def clear_queue():
 @log_request
 def backup_database():
     """Create and download a backup of the SQLite database."""
+    from flask import after_this_request
+
     db = get_database()
     tmp_path = None
     try:
@@ -212,12 +213,20 @@ def backup_database():
         timestamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
         filename = f"minuspod-backup-{timestamp}.db"
 
-        # Read into memory so we can delete the temp file before responding
-        with open(tmp_path, 'rb') as f:
-            data = io.BytesIO(f.read())
+        # Clean up temp file after response is sent (stream from disk, not memory)
+        cleanup_path = tmp_path
+        tmp_path = None  # prevent finally block from deleting before send
+
+        @after_this_request
+        def _cleanup(response):
+            try:
+                os.unlink(cleanup_path)
+            except OSError:
+                pass
+            return response
 
         return send_file(
-            data,
+            cleanup_path,
             mimetype='application/octet-stream',
             as_attachment=True,
             download_name=filename,

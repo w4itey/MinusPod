@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Webhook examples in README**: Pushover and ntfy integration walkthroughs with template examples
 
 ### Changed
+- **Webhook formatted payload fields**: Added human-readable `processing_time` (M:SS), `llm_cost_display` ($X.XX), and `time_saved` (M:SS) alongside raw numeric values in webhook payloads
+- **Webhook README examples**: Pushover and ntfy examples now use pre-formatted fields instead of inline Jinja2 formatting
 - **Storage formatting**: Values now auto-format to GB when >= 1024 MB (SystemStatus, EpisodeDetail, FeedDetail, cleanup results)
 - **System Status section**: Always expanded on Settings page load (localStorage reset on mount)
 - **`formatStorage` utility**: New shared formatter in `settingsUtils.ts` for consistent MB/GB display

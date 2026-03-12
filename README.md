@@ -587,9 +587,13 @@ Custom payload templates are Jinja2 strings rendered against these variables:
 | `episode.url` | string | Full UI URL to episode |
 | `episode.ads_removed` | int | Number of ads removed |
 | `episode.processing_time_secs` | float | Processing duration in seconds |
+| `episode.processing_time` | string | Processing duration formatted as M:SS or H:MM:SS |
 | `episode.llm_cost` | float | LLM cost in USD |
+| `episode.llm_cost_display` | string | LLM cost formatted as $X.XX |
 | `episode.time_saved_secs` | float/null | Seconds of audio removed |
+| `episode.time_saved` | string/null | Time saved formatted as M:SS or H:MM:SS |
 | `episode.error_message` | string/null | Error message (failed events only) |
+| `test` | bool | `true` only on test webhook fires; absent on real events |
 
 ### Example: Pushover
 
@@ -605,7 +609,7 @@ Pushover supports native webhook ingestion with data extraction selectors. No cu
 | Field | Selector |
 |---|---|
 | Title | `{{event}}` |
-| Body | `{{episode.title}}`<br>`{{episode.ads_removed}} ads removed. Saved {{episode.time_saved_secs}}s. Cost ${{episode.llm_cost}}` |
+| Body | `{{episode.title}}`<br>`{{episode.ads_removed}} ads removed. Saved {{episode.time_saved}}. Cost {{episode.llm_cost_display}}` |
 | URL | `{{episode.url}}` |
 | URL Title | `Open in MinusPod` |
 
@@ -625,7 +629,7 @@ ntfy requires a custom payload template to match its expected JSON format.
      {
        "topic": "your-topic",
        "title": "{{ episode.title }}",
-       "message": "Removed {{ episode.ads_removed }} ads in {{ '%02d:%02d' | format(episode.processing_time_secs | int // 60, episode.processing_time_secs | int % 60) }}. Cost ${{ '%.2f' % episode.llm_cost }}",
+       "message": "Removed {{ episode.ads_removed }} ads in {{ episode.processing_time }}. Cost {{ episode.llm_cost_display }}",
        "actions": [{"action": "view", "label": "Open Episode", "url": "{{ episode.url }}"}]
      }
      ```

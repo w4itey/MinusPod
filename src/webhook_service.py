@@ -14,6 +14,8 @@ import urllib.error
 from jinja2 import TemplateError
 from jinja2.sandbox import SandboxedEnvironment
 
+from utils.url import validate_url, SSRFError
+
 logger = logging.getLogger('podcast.webhooks')
 
 EVENT_EPISODE_PROCESSED = 'Episode Processed'
@@ -26,6 +28,25 @@ _REQUEST_TIMEOUT_SECS = 5
 
 _sandbox_env = SandboxedEnvironment()
 
+def _format_duration(seconds):
+    """Format seconds as M:SS or H:MM:SS."""
+    if seconds is None:
+        return None
+    total = int(seconds)
+    h, remainder = divmod(total, 3600)
+    m, s = divmod(remainder, 60)
+    if h > 0:
+        return f"{h}:{m:02d}:{s:02d}"
+    return f"{m}:{s:02d}"
+
+
+def _format_cost(cost):
+    """Format cost as $X.XX."""
+    if cost is None:
+        return None
+    return f"${cost:.2f}"
+
+
 _DUMMY_CONTEXT = {
     'event': 'Episode Processed',
     'timestamp': '',  # overwritten at render time with current UTC
@@ -36,8 +57,11 @@ _DUMMY_CONTEXT = {
         'url': 'http://your-server:8000/ui/feeds/example-podcast/episodes/abc123',
         'ads_removed': 3,
         'processing_time_secs': 42.5,
+        'processing_time': _format_duration(42.5),
         'llm_cost': 0.0035,
+        'llm_cost_display': _format_cost(0.0035),
         'time_saved_secs': 187.0,
+        'time_saved': _format_duration(187.0),
         'error_message': None,
     },
 }
@@ -55,6 +79,9 @@ def _build_context(event, episode_id, slug, episode_title, processing_time,
     else:
         time_saved_secs = None
 
+    rounded_processing = round(processing_time, 2) if processing_time is not None else None
+    rounded_cost = round(llm_cost, 6) if llm_cost is not None else None
+
     return {
         'event': event,
         'timestamp': datetime.datetime.now(datetime.timezone.utc).strftime(
@@ -66,9 +93,12 @@ def _build_context(event, episode_id, slug, episode_title, processing_time,
             'slug': slug,
             'url': episode_url,
             'ads_removed': ads_removed,
-            'processing_time_secs': round(processing_time, 2) if processing_time is not None else None,
-            'llm_cost': round(llm_cost, 6) if llm_cost is not None else None,
+            'processing_time_secs': rounded_processing,
+            'processing_time': _format_duration(rounded_processing),
+            'llm_cost': rounded_cost,
+            'llm_cost_display': _format_cost(rounded_cost),
             'time_saved_secs': time_saved_secs,
+            'time_saved': _format_duration(time_saved_secs),
             'error_message': error_message,
         },
     }
@@ -115,6 +145,14 @@ def _prepare_and_dispatch(webhook_config, context, add_test_flag=False,
     """Render payload and dispatch to a single webhook. Returns HTTP status or None."""
     url = webhook_config.get('url')
     if not url:
+        return None
+
+    # Re-validate URL at dispatch time to guard against stored URLs that
+    # predate SSRF validation or DNS changes since creation.
+    try:
+        validate_url(url)
+    except SSRFError as exc:
+        logger.warning("Webhook URL blocked by SSRF check at dispatch time: %s (%s)", url, exc)
         return None
 
     if add_test_flag:
@@ -233,30 +271,19 @@ def fire_test_event(webhook_config):
     context = None
 
     try:
-        conn = db.get_connection()
-        row = conn.execute(
-            """SELECT h.episode_id, h.podcast_slug, h.episode_title,
-                      h.processing_duration_seconds, h.llm_cost, h.ads_detected,
-                      e.original_duration, e.new_duration
-               FROM processing_history h
-               LEFT JOIN episodes e ON e.episode_id = h.episode_id
-                   AND e.podcast_slug = h.podcast_slug
-               WHERE h.status = 'completed'
-               ORDER BY h.processed_at DESC
-               LIMIT 1"""
-        ).fetchone()
+        row = db.get_latest_completed_processing()
         if row:
             context = _build_context(
                 event=EVENT_EPISODE_PROCESSED,
-                episode_id=row[0],
-                slug=row[1],
-                episode_title=row[2],
-                processing_time=row[3],
-                llm_cost=row[4],
-                ads_removed=row[5],
+                episode_id=row['episode_id'],
+                slug=row['podcast_slug'],
+                episode_title=row['episode_title'],
+                processing_time=row['processing_duration_seconds'],
+                llm_cost=row['llm_cost'],
+                ads_removed=row['ads_detected'],
                 error_message=None,
-                original_duration=row[6],
-                new_duration=row[7],
+                original_duration=row['original_duration'],
+                new_duration=row['new_duration'],
             )
     except Exception:
         logger.debug("Could not load real data for test webhook, using placeholders")
