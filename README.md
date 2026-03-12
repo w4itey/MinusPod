@@ -570,8 +570,8 @@ Configure webhooks in **Settings > Webhooks** in the web UI, or via the REST API
 
 | Event | Fires when |
 |---|---|
-| `episode.processed` | Episode completes processing successfully |
-| `episode.failed` | Episode reaches permanently failed status |
+| `Episode Processed` | Episode completes processing successfully |
+| `Episode Failed` | Episode reaches permanently failed status |
 
 ### Template Variables
 
@@ -579,7 +579,7 @@ Custom payload templates are Jinja2 strings rendered against these variables:
 
 | Variable | Type | Description |
 |---|---|---|
-| `event` | string | `episode.processed` or `episode.failed` |
+| `event` | string | `Episode Processed` or `Episode Failed` |
 | `timestamp` | string | ISO 8601 UTC timestamp |
 | `episode.id` | string | Episode ID |
 | `episode.title` | string | Episode title |

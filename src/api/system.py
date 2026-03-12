@@ -195,30 +195,16 @@ def backup_database():
     db = get_database()
     tmp_path = None
     try:
-        # Get the live database file path
-        conn = db.get_connection()
-        cursor = conn.execute("PRAGMA database_list")
-        rows = cursor.fetchall()
-        src_path = None
-        for row in rows:
-            if row[1] == 'main':
-                src_path = row[2]
-                break
-
-        if not src_path:
-            return error_response("Could not determine database path", 500)
-
         # Create a temp file for the backup
         tmp_file = tempfile.NamedTemporaryFile(suffix='.db', delete=False)
         tmp_path = tmp_file.name
         tmp_file.close()
 
-        # Use SQLite backup API for a consistent snapshot
-        src_conn = sqlite3.connect(src_path)
+        # Use SQLite backup API with the app's existing connection for consistency
+        src_conn = db.get_connection()
         dst_conn = sqlite3.connect(tmp_path)
         src_conn.backup(dst_conn)
         dst_conn.close()
-        src_conn.close()
 
         backup_size = os.path.getsize(tmp_path)
         logger.info(f"Database backup created: {backup_size} bytes")
@@ -240,7 +226,7 @@ def backup_database():
         logger.error(f"Database backup failed: {e}")
         return error_response(f"Backup failed: {e}", 500)
     finally:
-        if tmp_path and os.path.exists(tmp_path):
+        if tmp_path:
             try:
                 os.unlink(tmp_path)
             except OSError:

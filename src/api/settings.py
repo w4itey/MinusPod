@@ -412,12 +412,23 @@ def _find_webhook(webhooks, webhook_id):
 
 def _validate_events(events):
     """Validate events list. Returns error message string or None if valid."""
-    if not events or not isinstance(events, list) or len(events) == 0:
+    if not events or not isinstance(events, list):
         return 'events must be a non-empty list'
     invalid = [e for e in events if e not in VALID_EVENTS]
     if invalid:
         return (f'Invalid events: {", ".join(invalid)}. '
                 f'Valid events: {", ".join(sorted(VALID_EVENTS))}')
+    return None
+
+
+def _validate_webhook_url(url):
+    """Validate a webhook URL. Returns error response or None if valid."""
+    if not url:
+        return error_response('url is required', 400)
+    try:
+        validate_url(url)
+    except SSRFError as e:
+        return error_response(f'Invalid webhook URL: {e}', 400)
     return None
 
 
@@ -441,13 +452,9 @@ def create_webhook():
         return error_response('Request body required', 400)
 
     url = data.get('url', '').strip()
-    if not url or not (url.startswith('http://') or url.startswith('https://')):
-        return error_response('url must start with http:// or https://', 400)
-
-    try:
-        validate_url(url)
-    except SSRFError as e:
-        return error_response(f'Invalid webhook URL: {e}', 400)
+    url_err = _validate_webhook_url(url)
+    if url_err:
+        return url_err
 
     events = data.get('events')
     events_err = _validate_events(events)
@@ -524,12 +531,9 @@ def update_webhook(webhook_id):
 
     if 'url' in data:
         url = data['url'].strip()
-        if not url or not (url.startswith('http://') or url.startswith('https://')):
-            return error_response('url must start with http:// or https://', 400)
-        try:
-            validate_url(url)
-        except SSRFError as e:
-            return error_response(f'Invalid webhook URL: {e}', 400)
+        url_err = _validate_webhook_url(url)
+        if url_err:
+            return url_err
         target['url'] = url
 
     if 'events' in data:

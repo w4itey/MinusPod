@@ -60,7 +60,7 @@ class TestBuildContext:
             slug='my-pod',
             episode_title='My Episode',
             processing_time=30.0,
-            llm_cost=0.1234,
+            llm_cost=0.00412345,
             ads_removed=2,
             error_message=None,
             original_duration=600.0,
@@ -72,7 +72,7 @@ class TestBuildContext:
         assert ctx['episode']['slug'] == 'my-pod'
         assert ctx['episode']['ads_removed'] == 2
         assert ctx['episode']['processing_time_secs'] == 30.0
-        assert ctx['episode']['llm_cost'] == 0.12  # rounded to 2 decimal places
+        assert ctx['episode']['llm_cost'] == 0.004123  # rounded to 6 decimal places
         assert ctx['episode']['time_saved_secs'] == 100.0
         assert ctx['episode']['error_message'] is None
         assert 'timestamp' in ctx
@@ -143,7 +143,7 @@ class TestPrepareAndDispatchSigning:
     def test_prepare_and_dispatch_with_secret(self, mock_dispatch):
         """X-MinusPod-Signature header is added when secret is set."""
         config = {'url': 'https://hook.example.com', 'secret': 'mysecret'}
-        context = {'event': 'episode.processed', 'episode': {}}
+        context = {'event': 'Episode Processed', 'episode': {}}
         _prepare_and_dispatch(config, context)
 
         args = mock_dispatch.call_args[0]
@@ -155,7 +155,7 @@ class TestPrepareAndDispatchSigning:
     def test_prepare_and_dispatch_no_secret(self, mock_dispatch):
         """No signature header when no secret."""
         config = {'url': 'https://hook.example.com'}
-        context = {'event': 'episode.processed', 'episode': {}}
+        context = {'event': 'Episode Processed', 'episode': {}}
         _prepare_and_dispatch(config, context)
 
         args = mock_dispatch.call_args[0]
@@ -176,31 +176,31 @@ class TestPrepareAndDispatchPayload:
             'url': 'https://hook.example.com',
             'payloadTemplate': 'hello {{ event }}',
         }
-        context = {'event': 'episode.processed', 'episode': {}}
+        context = {'event': 'Episode Processed', 'episode': {}}
         _prepare_and_dispatch(config, context)
 
         args = mock_dispatch.call_args[0]
         body_bytes = args[1]
-        assert body_bytes == b'hello episode.processed'
+        assert body_bytes == b'hello Episode Processed'
 
     @patch('webhook_service._dispatch_webhook', return_value=200)
     def test_prepare_and_dispatch_default_payload(self, mock_dispatch):
         """Uses json.dumps of context when no template."""
         config = {'url': 'https://hook.example.com'}
-        context = {'event': 'episode.processed', 'data': 123}
+        context = {'event': 'Episode Processed', 'data': 123}
         _prepare_and_dispatch(config, context)
 
         args = mock_dispatch.call_args[0]
         body_bytes = args[1]
         parsed = json.loads(body_bytes)
-        assert parsed['event'] == 'episode.processed'
+        assert parsed['event'] == 'Episode Processed'
         assert parsed['data'] == 123
 
     @patch('webhook_service._dispatch_webhook', return_value=200)
     def test_prepare_and_dispatch_test_flag_default(self, mock_dispatch):
         """test: true is in payload for default (no template) path."""
         config = {'url': 'https://hook.example.com'}
-        context = {'event': 'episode.processed'}
+        context = {'event': 'Episode Processed'}
         _prepare_and_dispatch(config, context, add_test_flag=True)
 
         args = mock_dispatch.call_args[0]
@@ -214,11 +214,11 @@ class TestPrepareAndDispatchPayload:
             'url': 'https://hook.example.com',
             'payloadTemplate': '{% if test %}TEST{% endif %} {{ event }}',
         }
-        context = {'event': 'episode.processed'}
+        context = {'event': 'Episode Processed'}
         _prepare_and_dispatch(config, context, add_test_flag=True)
 
         args = mock_dispatch.call_args[0]
-        assert args[1] == b'TEST episode.processed'
+        assert args[1] == b'TEST Episode Processed'
 
 
 # ---------------------------------------------------------------------------

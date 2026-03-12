@@ -8,8 +8,8 @@ import {
 import type { Webhook, WebhookPayload } from '../../api/settings';
 
 const EVENT_OPTIONS: { value: string; label: string }[] = [
-  { value: 'episode.processed', label: 'Episode processed' },
-  { value: 'episode.failed', label: 'Episode permanently failed' },
+  { value: 'Episode Processed', label: 'Episode Processed' },
+  { value: 'Episode Failed', label: 'Episode Failed' },
 ];
 
 const DEFAULT_TEMPLATE_PLACEHOLDER = [

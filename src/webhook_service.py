@@ -16,8 +16,8 @@ from jinja2.sandbox import SandboxedEnvironment
 
 logger = logging.getLogger('podcast.webhooks')
 
-EVENT_EPISODE_PROCESSED = 'episode.processed'
-EVENT_EPISODE_FAILED = 'episode.failed'
+EVENT_EPISODE_PROCESSED = 'Episode Processed'
+EVENT_EPISODE_FAILED = 'Episode Failed'
 VALID_EVENTS = {EVENT_EPISODE_PROCESSED, EVENT_EPISODE_FAILED}
 
 _RETRY_ATTEMPTS = 2
@@ -27,8 +27,8 @@ _REQUEST_TIMEOUT_SECS = 5
 _sandbox_env = SandboxedEnvironment()
 
 _DUMMY_CONTEXT = {
-    'event': EVENT_EPISODE_PROCESSED,
-    'timestamp': '2025-01-15T12:00:00Z',
+    'event': 'Episode Processed',
+    'timestamp': '',  # overwritten at render time with current UTC
     'episode': {
         'id': 'abc123',
         'title': 'Example Episode Title',
@@ -67,7 +67,7 @@ def _build_context(event, episode_id, slug, episode_title, processing_time,
             'url': episode_url,
             'ads_removed': ads_removed,
             'processing_time_secs': round(processing_time, 2) if processing_time is not None else None,
-            'llm_cost': round(llm_cost, 2) if llm_cost is not None else None,
+            'llm_cost': round(llm_cost, 6) if llm_cost is not None else None,
             'time_saved_secs': time_saved_secs,
             'error_message': error_message,
         },
