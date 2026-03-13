@@ -17,8 +17,9 @@
 #      WHISPER_API_BASE_URL=http://whisper-server:8765/v1
 #      WHISPER_DEVICE=cpu
 #
-# The server listens on port 8765 and accepts any audio format (--convert).
-# Word-level timestamps are enabled via --dtw for precise ad boundary detection.
+# The server listens on port 8765 with word-level timestamps (--dtw) for
+# precise ad boundary detection. MinusPod sends preprocessed 16kHz mono WAV,
+# so --convert is not needed.
 
 services:
   whisper-server:
@@ -32,6 +33,7 @@ services:
     # NOTE: command must be a single-element list because the image's
     # ENTRYPOINT is ["bash", "-c"]. A plain string gets wrapped in
     # /bin/sh -c, breaking argument passing.
+    working_dir: /tmp
     command:
       - >-
         whisper-server
@@ -42,7 +44,7 @@ services:
         --threads 8
         --processors 1
         --dtw large.v3.turbo
-        --convert
+        --no-flash-attn
     deploy:
       resources:
         reservations:

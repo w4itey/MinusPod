@@ -600,6 +600,15 @@ class Transcriber:
                     'words': words,
                 })
 
+            if not result and response is not None and response.status_code == 200:
+                raw_preview = response.text[:500] if response.text else "(empty body)"
+                logger.warning(
+                    "Whisper API returned 200 but 0 usable segments. "
+                    "This often means the server failed to decode the audio "
+                    "(e.g. --convert writing to a non-writable directory). "
+                    "Raw response: %s", raw_preview,
+                )
+
             # Filter hallucinations
             original_count = len(result)
             result = self.filter_hallucinations(result)
