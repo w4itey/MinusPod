@@ -6,6 +6,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.57] - 2026-03-14
+
+### Fixed
+- **Verification pass ignoring whisper backend**: Second pass (verification) was hardcoded to use local GPU whisper via `WhisperModelSingleton`, bypassing `WHISPER_BACKEND` config. Now routes through `Transcriber.transcribe()` when backend is `openai-api`, matching first pass behavior. (GitHub #7)
+- **SSE queue unbounded growth**: `queue.Queue()` had no maxsize, so `put_nowait` could never raise `queue.Full` -- the "drop if full" logic was dead code. Status updates accumulated unboundedly during long processing runs, causing large SSE payloads. Added `maxsize=50` so stale updates are dropped.
+- **Fingerprint comparison TypeError**: `compare_fingerprints()` passed `str` to `chromaprint.decode_fingerprint()` which expects `bytes` (ctypes `c_char` pointer). Now encodes to bytes before calling the C library.
+- **Episode ID churn on every refresh**: Acast/Megaphone feeds change RSS GUIDs between fetches, causing repeated "Episode ID changed" warnings. Now updates the stored `episode_id` for discovered episodes to match the new GUID, and downgrades the log from WARNING to DEBUG.
+- **Duplicate worker processing (broken leader election)**: `open(lock_path, 'w')` truncated the lock file, creating a race where both Gunicorn workers could acquire `flock()`. Changed to `open(lock_path, 'a')` (append mode) which doesn't truncate, so `flock(LOCK_EX|LOCK_NB)` works correctly.
+
 ## [1.0.56] - 2026-03-13
 
 ### Changed

@@ -195,8 +195,8 @@ def refresh_rss_feed(slug: str, feed_url: str, force: bool = False):
                             slug, ep.get('title'), iso_published
                         )
                         if existing_by_title and existing_by_title['episode_id'] != ep['id']:
-                            refresh_logger.warning(
-                                f"[{slug}] Episode ID changed: {existing_by_title['episode_id']} -> {ep['id']}, "
+                            refresh_logger.debug(
+                                f"[{slug}] Episode ID updated: {existing_by_title['episode_id']} -> {ep['id']}, "
                                 f"title: {ep.get('title')}"
                             )
                             continue  # Skip - episode already exists with different ID
