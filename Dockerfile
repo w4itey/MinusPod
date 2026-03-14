@@ -32,6 +32,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libsndfile1 \
     libchromaprint-tools \
+    && apt-get upgrade -y \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # Set python3.11 as default and bootstrap pip via ensurepip
@@ -43,10 +44,10 @@ RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
 # Set working directory
 WORKDIR /app
 
-# Pre-install PyTorch 2.3.0 with CUDA 12.1 (includes bundled cuDNN)
+# Pre-install PyTorch 2.5.0 with CUDA 12.1 (includes bundled cuDNN)
 RUN pip install --no-cache-dir \
-    torch==2.3.0+cu121 \
-    torchaudio==2.3.0+cu121 \
+    torch==2.5.0+cu121 \
+    torchaudio==2.5.0+cu121 \
     --extra-index-url https://download.pytorch.org/whl/cu121
 
 # Copy requirements and install remaining Python dependencies
