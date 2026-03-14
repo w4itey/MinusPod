@@ -53,7 +53,7 @@ class VerificationPass:
             'segments': transcript segments from verification
             'status': 'clean', 'found_ads', 'no_segments', or 'transcription_failed'
         """
-        # Step 1: Re-transcribe processed audio on GPU
+        # Step 1: Re-transcribe processed audio
         if progress_callback:
             progress_callback("transcribing", 85)
         logger.info(f"[{slug}:{episode_id}] Verification: Re-transcribing processed audio")
