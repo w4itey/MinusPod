@@ -99,7 +99,7 @@ PROVIDER_ANTHROPIC = 'anthropic'
 PROVIDER_OPENROUTER = 'openrouter'
 PROVIDER_OPENAI_COMPATIBLE = 'openai-compatible'
 PROVIDER_OLLAMA = 'ollama'
-PROVIDERS_NON_ANTHROPIC = ('openai-compatible', 'openai', 'wrapper', 'ollama', 'openrouter')
+PROVIDERS_NON_ANTHROPIC = ('openai-compatible', 'openai', 'wrapper', 'ollama')
 
 
 def _get_cached_setting(key: str) -> Optional[str]:

@@ -80,19 +80,6 @@ function LLMProviderSection({
             <p className="mt-1 text-sm text-muted-foreground">
               Get your API key from openrouter.ai/keys
             </p>
-            <div className="mt-2">
-              {openrouterApiKeyConfigured ? (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-500/10 text-green-600 dark:text-green-400">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                  Configured
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-yellow-500/10 text-yellow-600 dark:text-yellow-400">
-                  <span className="w-1.5 h-1.5 rounded-full bg-yellow-500" />
-                  Not configured
-                </span>
-              )}
-            </div>
           </div>
         )}
 

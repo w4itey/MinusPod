@@ -38,9 +38,9 @@ def get_settings():
     from ad_detector import AdDetector, DEFAULT_MODEL
     from chapters_generator import CHAPTERS_MODEL
     from llm_client import (
-    get_effective_provider, get_effective_base_url, get_api_key, get_effective_openrouter_api_key,
-    PROVIDER_ANTHROPIC, PROVIDER_OPENROUTER,
-)
+        get_effective_provider, get_effective_base_url, get_api_key, get_effective_openrouter_api_key,
+        PROVIDER_ANTHROPIC, PROVIDER_OPENROUTER,
+    )
 
     settings = db.get_all_settings()
 
@@ -220,8 +220,8 @@ def update_ad_detection_settings():
         from llm_client import get_llm_client
         get_llm_client(force_new=True)
 
-    valid_whisper_backends = (WHISPER_BACKEND_LOCAL, WHISPER_BACKEND_API, WHISPER_BACKEND_OPENROUTER)
     if 'whisperBackend' in data:
+        valid_whisper_backends = (WHISPER_BACKEND_LOCAL, WHISPER_BACKEND_API, WHISPER_BACKEND_OPENROUTER)
         if data['whisperBackend'] not in valid_whisper_backends:
             return json_response(
                 {'error': f'whisperBackend must be one of: {", ".join(valid_whisper_backends)}'}, 400

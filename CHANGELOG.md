@@ -9,12 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.63] - 2026-03-15
 
 ### Added
-- **OpenRouter as first-class LLM provider**: Access 200+ models (Claude, GPT, Gemini, open-weights) through a single OpenRouter API key. Configure via `LLM_PROVIDER=openrouter` and `OPENROUTER_API_KEY`, or switch at runtime from the Settings UI.
-- **OpenRouter Whisper transcription**: Use `WHISPER_BACKEND=openrouter-api` to route transcription through OpenRouter, eliminating the NVIDIA GPU requirement entirely.
-- **Frontend OpenRouter UI**: Provider dropdown now includes OpenRouter with inline API key management and status badges.
-- **docker-compose.openrouter.yml**: Pre-configured compose file for running MinusPod with OpenRouter (no GPU required).
-- **.env.example**: Provider-neutral environment template documenting all LLM and Whisper options.
-- **curl in Docker image**: Added curl to apt-get install for container health checks.
+- **OpenRouter LLM provider**: Use 200+ models via one API key. Set `LLM_PROVIDER=openrouter` and `OPENROUTER_API_KEY`, or switch from the Settings UI at runtime.
+- **OpenRouter Whisper backend**: `WHISPER_BACKEND=openrouter-api` routes transcription through OpenRouter -- no NVIDIA GPU needed.
+- **Frontend OpenRouter UI**: Provider dropdown, inline API key input, and status badges in Settings.
+- **docker-compose.openrouter.yml**: Ready-to-use compose file for GPU-free OpenRouter setup.
+- **.env.example**: Template covering all LLM and Whisper provider options.
+- **curl in Docker image**: For container health checks.
 
 ## [1.0.62] - 2026-03-15
 

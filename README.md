@@ -162,7 +162,7 @@ Audio analysis runs automatically on every episode (lightweight, uses only ffmpe
 
 ## Using OpenRouter
 
-[OpenRouter](https://openrouter.ai) provides access to 200+ LLM models through a single API key. It can also serve as a Whisper transcription backend, eliminating the need for a local NVIDIA GPU entirely.
+[OpenRouter](https://openrouter.ai) is a unified API that routes to 200+ models (Claude, GPT, Gemini, open-weights) with one API key. It also supports Whisper transcription, so you can run MinusPod without an NVIDIA GPU.
 
 ### Setup
 
@@ -186,7 +186,7 @@ OPENROUTER_API_KEY=sk-or-v1-your-key-here
 
 ### Whisper via OpenRouter
 
-OpenRouter can also handle transcription, removing the NVIDIA GPU requirement:
+To skip local GPU transcription entirely, point Whisper at OpenRouter too:
 
 ```bash
 WHISPER_BACKEND=openrouter-api
@@ -196,19 +196,19 @@ WHISPER_DEVICE=cpu
 
 ### Model Selection
 
-Override the default model via the Settings UI or the `OPENAI_MODEL` environment variable. Use any model ID from the [OpenRouter models page](https://openrouter.ai/models), for example:
+Change the model in the Settings UI or with the `OPENAI_MODEL` env var. Any [OpenRouter model ID](https://openrouter.ai/models) works:
 
 - `anthropic/claude-sonnet-4-5` -- Claude Sonnet via OpenRouter
 - `openai/gpt-4o` -- GPT-4o via OpenRouter
 - `google/gemini-2.5-flash-preview` -- Gemini Flash via OpenRouter
 
-All provider settings (LLM provider, API key, model, Whisper backend) can be changed at runtime from the Settings UI without restarting the container.
+All of these can be changed at runtime from the Settings UI -- no container restart needed.
 
-See [`docker-compose.openrouter.yml`](docker-compose.openrouter.yml) for a complete example.
+See [`docker-compose.openrouter.yml`](docker-compose.openrouter.yml) for a full working example.
 
 ## Requirements
 
-- Docker with NVIDIA GPU support (for local Whisper), **or** an [OpenRouter](https://openrouter.ai) API key (no GPU needed)
+- Docker with NVIDIA GPU support (for local Whisper), **or** a [remote Whisper backend](#remote-whisper-transcription) / [OpenRouter API](#using-openrouter) (no GPU needed)
 - Anthropic API key, [OpenRouter](https://openrouter.ai) API key, **or** [Ollama](https://ollama.com) for local inference
 
 ### Memory Requirements
