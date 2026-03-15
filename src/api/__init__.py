@@ -230,7 +230,7 @@ def get_status_service():
 
 
 def _enrich_models_with_pricing(models: list) -> None:
-    """Refresh and attach pricing info to a list of model dicts in-place."""
+    """Refresh and attach pricing info to a list of model dicts in-place, then sort alphabetically."""
     try:
         db = get_database()
         db.refresh_model_pricing(models)
@@ -243,6 +243,7 @@ def _enrich_models_with_pricing(models: list) -> None:
                 model['outputCostPerMtok'] = pricing['outputCostPerMtok']
     except Exception as e:
         logger.warning(f"Failed to refresh model pricing: {e}")
+    models.sort(key=lambda m: (m.get('name') or m.get('id', '')).lower())
 
 
 def _find_similar_pattern(db, pattern_data: dict) -> Optional[dict]:

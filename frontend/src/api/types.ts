@@ -113,6 +113,12 @@ export const LLM_PROVIDERS = {
   OPENROUTER: 'openrouter' as const,
 };
 
+export const WHISPER_BACKENDS = {
+  LOCAL: 'local' as const,
+  OPENAI_API: 'openai-api' as const,
+  OPENROUTER_API: 'openrouter-api' as const,
+};
+
 export interface Settings {
   systemPrompt: SettingValue;
   verificationPrompt: SettingValue;

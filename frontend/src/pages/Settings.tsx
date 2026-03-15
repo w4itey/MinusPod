@@ -4,7 +4,7 @@ import { getSettings, updateSettings, resetSettings, resetPrompts, getModels, ge
 import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import type { LlmProvider, WhisperBackend, WhisperApiConfig } from '../api/types';
-import { LLM_PROVIDERS } from '../api/types';
+import { LLM_PROVIDERS, WHISPER_BACKENDS } from '../api/types';
 
 import SystemStatusSection from './settings/SystemStatusSection';
 import StorageRetentionSection from './settings/StorageRetentionSection';
@@ -181,8 +181,10 @@ function Settings() {
         llmProvider,
         openaiBaseUrl,
         whisperBackend,
-        whisperApiBaseUrl: whisperApiConfig.baseUrl,
-        ...(whisperApiConfig.apiKey ? { whisperApiKey: whisperApiConfig.apiKey } : {}),
+        ...(whisperBackend !== WHISPER_BACKENDS.OPENROUTER_API ? {
+          whisperApiBaseUrl: whisperApiConfig.baseUrl,
+          ...(whisperApiConfig.apiKey ? { whisperApiKey: whisperApiConfig.apiKey } : {}),
+        } : {}),
         whisperApiModel: whisperApiConfig.model,
         ...(openrouterApiKey ? { openrouterApiKey } : {}),
       }),

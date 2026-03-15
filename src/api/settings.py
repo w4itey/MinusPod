@@ -228,6 +228,10 @@ def update_ad_detection_settings():
             )
         db.set_setting('whisper_backend', data['whisperBackend'], is_default=False)
         logger.info(f"Updated whisper backend to: {data['whisperBackend']}")
+        # Clear API URL/key when switching to openrouter-api (auto-populated from LLM config)
+        if data['whisperBackend'] == WHISPER_BACKEND_OPENROUTER:
+            db.reset_setting('whisper_api_base_url')
+            db.reset_setting('whisper_api_key')
 
     if 'whisperApiBaseUrl' in data:
         if data['whisperApiBaseUrl']:

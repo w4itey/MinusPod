@@ -6,6 +6,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.64] - 2026-03-15
+
+### Improved
+- **WHISPER_BACKENDS constant**: Frontend whisper backend comparisons now use a shared constant object, matching the existing `LLM_PROVIDERS` pattern.
+- **Model sort deduplication**: Alphabetical sort moved into `_enrich_models_with_pricing` to avoid duplicate logic across endpoints.
+- **OpenRouter whisper save fix**: Frontend no longer sends empty `whisperApiBaseUrl` for OpenRouter backend, which was overriding the backend's `reset_setting` call.
+- **docker-compose.openrouter.yml cleanup**: Removed deprecated `version` key and `RETENTION_PERIOD` env var.
+
+### Added
+- **OpenRouter unit tests**: 11 tests covering `get_effective_openrouter_api_key`, `get_llm_client`, `get_api_key`, timeout, and retry logic for the openrouter provider.
+
 ## [1.0.63] - 2026-03-15
 
 ### Added
@@ -15,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **docker-compose.openrouter.yml**: Ready-to-use compose file for GPU-free OpenRouter setup.
 - **.env.example**: Template covering all LLM and Whisper provider options.
 - **curl in Docker image**: For container health checks.
+- **README Disclaimer section**: Moved disclaimer to a dedicated section at the bottom with ToC link; converted scattered warnings to footnotes.
+- **Alphabetical model sorting**: LLM model dropdowns now sort alphabetically by name.
 
 ## [1.0.62] - 2026-03-15
 
