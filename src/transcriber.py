@@ -43,6 +43,10 @@ from faster_whisper import WhisperModel, BatchedInferencePipeline
 
 logger = logging.getLogger(__name__)
 
+# Legacy backend identifier for graceful DB migration (removed in v1.0.68)
+_LEGACY_BACKEND_OPENROUTER = 'openrouter-api'
+_openrouter_migration_warned = False
+
 # Maximum segment duration for precise ad detection
 MAX_SEGMENT_DURATION = 15.0  # seconds
 
@@ -286,8 +290,30 @@ def _get_whisper_settings() -> Dict[str, str]:
             val = db.get_setting(setting_key)
             if val:
                 defaults[default_key] = val
+
+        # Graceful migration: openrouter-api whisper backend was removed in v1.0.68.
+        # Write the corrected value back so the fallback only runs once.
+        if defaults['backend'] == _LEGACY_BACKEND_OPENROUTER:
+            global _openrouter_migration_warned
+            if not _openrouter_migration_warned:
+                logger.warning(
+                    "OpenRouter Whisper backend is no longer supported (endpoint does not exist). "
+                    "Falling back to local whisper."
+                )
+                _openrouter_migration_warned = True
+            defaults['backend'] = WHISPER_BACKEND_LOCAL
+            db.set_setting('whisper_backend', WHISPER_BACKEND_LOCAL, is_default=False)
     except Exception as e:
         logger.warning(f"Could not read whisper settings from DB, using env defaults: {e}")
+
+    # Handle env-var-sourced legacy value (no DB to write back to)
+    if defaults['backend'] == _LEGACY_BACKEND_OPENROUTER:
+        logger.warning(
+            "WHISPER_BACKEND=openrouter-api is no longer supported. Falling back to local whisper. "
+            "Update your environment variable to WHISPER_BACKEND=local or WHISPER_BACKEND=openai-api."
+        )
+        defaults['backend'] = WHISPER_BACKEND_LOCAL
+
     return defaults
 
 
@@ -309,7 +335,7 @@ def calculate_optimal_chunk_duration(
     Returns:
         Tuple of (chunk_duration_seconds, reasoning_message)
     """
-    # For API backend, memory is irrelevant - use fixed cap
+    # For remote backends, memory is irrelevant - use fixed duration caps
     if whisper_backend == WHISPER_BACKEND_API:
         return API_CHUNK_DURATION_SECONDS, "API backend (fixed 10-min chunks for 25MB limit)"
 
@@ -529,6 +555,7 @@ class Transcriber:
             List of transcript segments, or None on failure.
         """
         preprocessed_path = None
+        flac_path = None
         try:
             if whisper_settings is None:
                 whisper_settings = _get_whisper_settings()
@@ -543,6 +570,25 @@ class Transcriber:
             # Preprocess audio for consistent quality
             preprocessed_path = self.preprocess_audio(audio_path)
             transcribe_path = preprocessed_path if preprocessed_path else audio_path
+
+            # After preprocessing, compress to FLAC for upload (lossless, ~4-5x smaller than WAV).
+            # Prevents 413 errors from APIs with tight upload limits (e.g. OpenRouter).
+            if transcribe_path.endswith('.wav'):
+                fd, flac_path = tempfile.mkstemp(suffix='.flac')
+                os.close(fd)
+                try:
+                    ffmpeg_result = subprocess.run(
+                        ['ffmpeg', '-y', '-i', transcribe_path, '-c:a', 'flac', flac_path],
+                        capture_output=True, timeout=60,
+                    )
+                    if ffmpeg_result.returncode == 0 and os.path.exists(flac_path):
+                        transcribe_path = flac_path
+                        logger.info(f"Compressed for upload: {os.path.getsize(flac_path) / 1024 / 1024:.1f}MB FLAC")
+                    else:
+                        flac_path = None
+                except Exception as e:
+                    logger.warning(f"FLAC compression failed, sending WAV: {e}")
+                    flac_path = None
 
             # Build request
             url = f"{base_url.rstrip('/')}/audio/transcriptions"
@@ -627,6 +673,11 @@ class Transcriber:
             if preprocessed_path and os.path.exists(preprocessed_path):
                 try:
                     os.unlink(preprocessed_path)
+                except OSError:
+                    pass
+            if flac_path and os.path.exists(flac_path):
+                try:
+                    os.unlink(flac_path)
                 except OSError:
                     pass
 
@@ -993,10 +1044,13 @@ class Transcriber:
 
                     # Use the batched pipeline for transcription
                     # word_timestamps=True enables precise boundary refinement later
-                    # language=None enables auto-detection to catch non-English DAI ads
+                    # language='en' prevents Whisper from misdetecting language on
+                    # music intros or sound effects (e.g. English podcast detected as
+                    # Spanish at 93% confidence). Non-English DAI ads are still caught
+                    # by _detect_non_english_segment() text heuristics downstream.
                     segments_generator, info = model.transcribe(
                         transcribe_path,
-                        language=None,  # Auto-detect to catch non-English ads (Spanish, etc.)
+                        language='en',
                         initial_prompt=initial_prompt,
                         beam_size=5,
                         batch_size=batch_size,

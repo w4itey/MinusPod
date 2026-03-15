@@ -6,6 +6,68 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.69] - 2026-03-15
+
+### Fixed
+- **Whisper language misdetection**: Local Whisper backend used `language=None` (auto-detect) which misidentified English podcasts as Spanish (93% confidence on music intros), corrupting transcriptions and generating false ad detections. Now uses `language='en'` matching the API backend. Non-English DAI ads are still caught by text-based heuristics.
+- **Ad detection crash on empty LLM response**: When the LLM returns `None` content (empty response, refusal, or content filtering), `ad_detector.py` crashed with `object of type 'NoneType' has no len()`. Both Anthropic and OpenAI-compatible `messages_create` now coerce `None` content to empty string.
+
+## [1.0.68] - 2026-03-15
+
+### Removed
+- **OpenRouter as Whisper backend**: OpenRouter does not support the `/v1/audio/transcriptions` endpoint -- all transcription attempts returned 500 errors. The `openrouter-api` whisper backend has been removed from config, settings API, frontend UI, and documentation. Users who had this backend configured will automatically fall back to local Whisper with a warning log. For cloud transcription without a GPU, use `WHISPER_BACKEND=openai-api` with Groq or another OpenAI-compatible provider. OpenRouter remains fully supported as an LLM provider.
+
+## [1.0.67] - 2026-03-15
+
+### Fixed
+- **OpenRouter Whisper 413 errors**: Reduced chunk duration from 10 min (600s) to 2.5 min (150s) for OpenRouter backend to stay under payload size limit. OpenAI API backend unchanged at 600s.
+- **`_verify_endpoint` logged misleading URL**: Removed unused `base_url` parameter; now reads the actual URL from the client after construction.
+- **OpenRouter API key format validation**: Settings API now rejects keys that do not start with `sk-or-`.
+- **Frontend: OpenRouter key sent after provider switch**: Clearing `openrouterApiKey` state when switching away from OpenRouter prevents stale key from being saved.
+
+### Added
+- Tests for OpenRouter whisper settings auto-population and chunk duration calculation.
+
+## [1.0.66] - 2026-03-15
+
+### Fixed
+- **OpenRouter model filtering**: `model_matches_provider` now returns True for OpenRouter (routes to any model), fixing false rejections of claude models via OpenRouter.
+- **LLM provider validation**: `llmProvider` is now validated against known providers before DB storage, preventing invalid values from persisting.
+- **OpenRouter startup verification**: `verify_llm_connection` now actually calls `verify_connection()` for OpenRouter instead of only checking key presence.
+- **Nested ternary in LLMProviderSection**: Extracted `renderApiKeyStatus()` helper for readability.
+- **Redundant expose directive**: Removed `expose: "8000"` from `docker-compose.openrouter.yml` (redundant with `ports`).
+
+### Added
+- **OpenRouter model/verify tests**: 8 new tests covering `model_matches_provider` for OpenRouter and `verify_llm_connection` OpenRouter paths.
+
+## [1.0.65] - 2026-03-15
+
+### Fixed
+- **Whisper API 413 errors**: Convert preprocessed WAV to FLAC (lossless, ~4-5x smaller) before uploading to Whisper API, preventing HTTP 413 (Request Entity Too Large) errors from APIs with tight upload limits (e.g. OpenRouter).
+
+## [1.0.64] - 2026-03-15
+
+### Improved
+- **WHISPER_BACKENDS constant**: Frontend whisper backend comparisons now use a shared constant object, matching the existing `LLM_PROVIDERS` pattern.
+- **Model sort deduplication**: Alphabetical sort moved into `_enrich_models_with_pricing` to avoid duplicate logic across endpoints.
+- **OpenRouter whisper save fix**: Frontend no longer sends empty `whisperApiBaseUrl` for OpenRouter backend, which was overriding the backend's `reset_setting` call.
+- **docker-compose.openrouter.yml cleanup**: Removed deprecated `version` key and `RETENTION_PERIOD` env var.
+
+### Added
+- **OpenRouter unit tests**: 11 tests covering `get_effective_openrouter_api_key`, `get_llm_client`, `get_api_key`, timeout, and retry logic for the openrouter provider.
+
+## [1.0.63] - 2026-03-15
+
+### Added
+- **OpenRouter LLM provider**: Use 200+ models via one API key. Set `LLM_PROVIDER=openrouter` and `OPENROUTER_API_KEY`, or switch from the Settings UI at runtime.
+- **OpenRouter Whisper backend**: `WHISPER_BACKEND=openrouter-api` routes transcription through OpenRouter -- no NVIDIA GPU needed.
+- **Frontend OpenRouter UI**: Provider dropdown, inline API key input, and status badges in Settings.
+- **docker-compose.openrouter.yml**: Ready-to-use compose file for GPU-free OpenRouter setup.
+- **.env.example**: Template covering all LLM and Whisper provider options.
+- **curl in Docker image**: For container health checks.
+- **README Disclaimer section**: Moved disclaimer to a dedicated section at the bottom with ToC link; converted scattered warnings to footnotes.
+- **Alphabetical model sorting**: LLM model dropdowns now sort alphabetically by name.
+
 ## [1.0.62] - 2026-03-15
 
 ### Fixed

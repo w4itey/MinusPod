@@ -51,6 +51,7 @@ function Settings() {
   const [whisperApiConfig, setWhisperApiConfig] = useState<WhisperApiConfig>({
     baseUrl: '', apiKey: '', apiKeyConfigured: undefined, model: 'whisper-1',
   });
+  const [openrouterApiKey, setOpenrouterApiKey] = useState('');
   const [retentionDays, setRetentionDays] = useState(30);
   const [retentionEnabled, setRetentionEnabled] = useState(true);
 
@@ -158,9 +159,10 @@ function Settings() {
       whisperBackend !== (settings.whisperBackend?.value || 'local') ||
       whisperApiConfig.baseUrl !== (settings.whisperApiBaseUrl?.value || '') ||
       whisperApiConfig.apiKey !== '' ||
-      whisperApiConfig.model !== (settings.whisperApiModel?.value || 'whisper-1')
+      whisperApiConfig.model !== (settings.whisperApiModel?.value || 'whisper-1') ||
+      openrouterApiKey !== ''
     );
-  }, [systemPrompt, verificationPrompt, selectedModel, verificationModel, whisperModel, autoProcessEnabled, audioBitrate, vttTranscriptsEnabled, chaptersEnabled, chaptersModel, minCutConfidence, llmProvider, openaiBaseUrl, whisperBackend, whisperApiConfig.baseUrl, whisperApiConfig.apiKey, whisperApiConfig.model, settings]);
+  }, [systemPrompt, verificationPrompt, selectedModel, verificationModel, whisperModel, autoProcessEnabled, audioBitrate, vttTranscriptsEnabled, chaptersEnabled, chaptersModel, minCutConfidence, llmProvider, openaiBaseUrl, whisperBackend, whisperApiConfig.baseUrl, whisperApiConfig.apiKey, whisperApiConfig.model, openrouterApiKey, settings]);
 
   const updateMutation = useMutation({
     mutationFn: () =>
@@ -182,8 +184,10 @@ function Settings() {
         whisperApiBaseUrl: whisperApiConfig.baseUrl,
         ...(whisperApiConfig.apiKey ? { whisperApiKey: whisperApiConfig.apiKey } : {}),
         whisperApiModel: whisperApiConfig.model,
+        ...(openrouterApiKey ? { openrouterApiKey } : {}),
       }),
     onSuccess: () => {
+      setOpenrouterApiKey('');
       queryClient.invalidateQueries({ queryKey: ['settings'] });
       queryClient.invalidateQueries({ queryKey: ['models'] });
     },
@@ -261,8 +265,14 @@ function Settings() {
         llmProvider={llmProvider}
         openaiBaseUrl={openaiBaseUrl}
         apiKeyConfigured={settings?.apiKeyConfigured}
-        onProviderChange={setLlmProvider}
+        openrouterApiKey={openrouterApiKey}
+        openrouterApiKeyConfigured={settings?.openrouterApiKeyConfigured}
+        onProviderChange={(p) => {
+          setLlmProvider(p);
+          if (p !== LLM_PROVIDERS.OPENROUTER) setOpenrouterApiKey('');
+        }}
         onBaseUrlChange={setOpenaiBaseUrl}
+        onOpenrouterApiKeyChange={setOpenrouterApiKey}
       />
 
       <AIModelsSection

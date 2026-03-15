@@ -1,4 +1,4 @@
-import type { WhisperModel, WhisperBackend, WhisperApiConfig } from '../../api/types';
+import { WHISPER_BACKENDS, type WhisperModel, type WhisperBackend, type WhisperApiConfig } from '../../api/types';
 import CollapsibleSection from '../../components/CollapsibleSection';
 
 interface TranscriptionSectionProps {
@@ -33,12 +33,12 @@ function TranscriptionSection({
             onChange={(e) => onWhisperBackendChange(e.target.value as WhisperBackend)}
             className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
           >
-            <option value="local">Local (faster-whisper)</option>
-            <option value="openai-api">Remote API (OpenAI-compatible)</option>
+            <option value={WHISPER_BACKENDS.LOCAL}>Local (faster-whisper)</option>
+            <option value={WHISPER_BACKENDS.OPENAI_API}>Remote API (OpenAI-compatible)</option>
           </select>
         </div>
 
-        {whisperBackend === 'local' && (
+        {whisperBackend === WHISPER_BACKENDS.LOCAL && (
           <div>
             <label htmlFor="whisperModel" className="block text-sm font-medium text-foreground mb-2">
               Whisper Model
@@ -66,7 +66,7 @@ function TranscriptionSection({
           </div>
         )}
 
-        {whisperBackend === 'openai-api' && (
+        {whisperBackend === WHISPER_BACKENDS.OPENAI_API && (
           <>
             <div>
               <label htmlFor="whisperApiBaseUrl" className="block text-sm font-medium text-foreground mb-2">

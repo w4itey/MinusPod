@@ -4,8 +4,6 @@
 
 Removes ads from podcasts using Whisper transcription. Serves modified RSS feeds that work with any podcast app.
 
-> **Disclaimer:** This tool is for personal use only. Only use it with podcasts you have permission to modify or where such modification is permitted under applicable laws. Respect content creators and their terms of service.
-
 ## Table of Contents
 
 - [How It Works](#how-it-works)
@@ -23,11 +21,13 @@ Removes ads from podcasts using Whisper transcription. Serves modified RSS feeds
   - [Using Claude Code Wrapper (Max Subscription)](#using-claude-code-wrapper-max-subscription)
 - [Using Ollama (Local LLM)](#using-ollama-local-llm)
 - [Remote Whisper Transcription](#remote-whisper-transcription)
+- [Using OpenRouter](#using-openrouter)
 - [API](#api)
 - [Webhooks](#webhooks)
 - [Remote Access](#remote-access)
 - [Data Storage](#data-storage)
 - [Custom Assets (Optional)](#custom-assets-optional)
+- [Disclaimer](#disclaimer)
 
 ## How It Works
 
@@ -161,8 +161,8 @@ Audio analysis runs automatically on every episode (lightweight, uses only ffmpe
 
 ## Requirements
 
-- Docker with NVIDIA GPU support (for Whisper)
-- Anthropic API key **or** [Ollama](https://ollama.com) for local inference
+- Docker with NVIDIA GPU support (for local Whisper), **or** a [remote Whisper backend](#remote-whisper-transcription) (no GPU needed)
+- Anthropic API key, [OpenRouter](https://openrouter.ai) API key, **or** [Ollama](https://ollama.com) for local inference
 
 ### Memory Requirements
 
@@ -336,7 +336,8 @@ This is a comma-separated list of domains excluded from Audiobookshelf's SSRF fi
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `ANTHROPIC_API_KEY` | _(none)_ | Claude API key (required when `LLM_PROVIDER=anthropic`, not needed for Ollama) |
-| `LLM_PROVIDER` | `anthropic` | LLM backend: `anthropic` (direct API), `openai-compatible` (wrapper), or `ollama` |
+| `LLM_PROVIDER` | `anthropic` | LLM backend: `anthropic`, `openrouter`, `openai-compatible`, or `ollama` |
+| `OPENROUTER_API_KEY` | _(none)_ | OpenRouter API key (required when `LLM_PROVIDER=openrouter`) |
 | `OPENAI_BASE_URL` | `http://localhost:8000/v1` | Base URL for OpenAI-compatible API (only used with non-anthropic providers) |
 | `OPENAI_API_KEY` | `not-needed` | API key for OpenAI-compatible endpoint (not required for Ollama or local wrappers) |
 | `OPENAI_MODEL` | _(none)_ | Model for OpenAI-compatible/Ollama providers. **Required for Ollama** (e.g. `qwen3:14b`). Defaults to `claude-sonnet-4-5-20250929` for wrapper mode if unset. |
@@ -353,7 +354,7 @@ This is a comma-separated list of domains excluded from Audiobookshelf's SSRF fi
 
 ### Using Claude Code Wrapper (Max Subscription)
 
-Instead of using API credits, you can use the [Claude Code OpenAI Wrapper](https://github.com/ttlequals0/claude-code-openai-wrapper) to leverage your Claude Max subscription.
+Instead of using API credits, you can use the [Claude Code OpenAI Wrapper](https://github.com/ttlequals0/claude-code-openai-wrapper) to use your Claude Max subscription instead.
 
 **Quick Start:**
 
@@ -414,11 +415,7 @@ environment:
   - OPENAI_MODEL=qwen3:14b
 ```
 
-> **Linux users:** `host.docker.internal` doesn't resolve by default. Add this to your service definition:
-> ```yaml
-> extra_hosts:
->   - "host.docker.internal:host-gateway"
-> ```
+> **Linux users:** `host.docker.internal` doesn't resolve by default on Linux. Add `extra_hosts: ["host.docker.internal:host-gateway"]` to your Docker service definition.
 
 The `OPENAI_API_KEY` variable is not required for Ollama. Token counts will still be tracked in the UI but cost will always show as $0.00, which is accurate since local inference is free.
 
@@ -464,7 +461,7 @@ Simplest task. Summarization only -- no structured detection. Minimize cost and 
 
 > **Example split for 16GB VRAM:** Pass 1 -> `qwen3:14b Q5_K_M` / Verification -> `qwen3:8b Q5_K_M` / Chapters -> `qwen3:4b Q4_K_M`
 
-> **Avoid models under 7B for production use.** JSON reliability degrades significantly at smaller sizes, which causes silent detection failures rather than recoverable errors (see below).
+> **Avoid models under 7B for production use.** JSON reliability degrades significantly at smaller sizes, which causes silent detection failures rather than recoverable errors. See [JSON Reliability Risks](#json-reliability-risks).
 
 ---
 
@@ -595,6 +592,42 @@ WHISPER_DEVICE=cpu
 ```
 
 All settings can also be configured via the Settings UI under the Transcription section.
+
+## Using OpenRouter
+
+[OpenRouter](https://openrouter.ai) is a unified API that routes to 200+ models (Claude, GPT, Gemini, open-weights) with one API key. OpenRouter is supported as an **LLM provider only** -- it does not support the `/v1/audio/transcriptions` endpoint required for Whisper transcription. For transcription without a GPU, use a [remote Whisper backend](#remote-whisper-transcription) such as Groq.
+
+### Setup
+
+1. Get an API key from [openrouter.ai/keys](https://openrouter.ai/keys)
+2. Use the pre-configured compose file:
+
+```bash
+# Create .env
+echo "OPENROUTER_API_KEY=sk-or-v1-your-key-here" > .env
+
+# Start
+docker compose -f docker-compose.openrouter.yml up -d
+```
+
+Or add OpenRouter to an existing setup:
+
+```bash
+LLM_PROVIDER=openrouter
+OPENROUTER_API_KEY=sk-or-v1-your-key-here
+```
+
+### Model Selection
+
+Change the model in the Settings UI or with the `OPENAI_MODEL` env var. Any [OpenRouter model ID](https://openrouter.ai/models) works:
+
+- `anthropic/claude-sonnet-4-5` -- Claude Sonnet via OpenRouter
+- `openai/gpt-4o` -- GPT-4o via OpenRouter
+- `google/gemini-2.5-flash-preview` -- Gemini Flash via OpenRouter
+
+All of these can be changed at runtime from the Settings UI -- no container restart needed.
+
+See [`docker-compose.openrouter.yml`](docker-compose.openrouter.yml) for a full working example.
 
 ## API
 
@@ -769,6 +802,12 @@ By default, a short audio marker is played where ads were removed. You can custo
 4. Restart the container
 
 The `replace.mp3` file will be inserted at each ad break. Keep it short (1-3 seconds). If no custom asset is provided, the built-in default marker is used.
+
+## Disclaimer
+
+This tool is for personal use only. Only use it with podcasts you have permission to modify or where such modification is permitted under applicable laws. Respect content creators and their terms of service.
+
+**LLM accuracy notice:** Most testing and development has been done with Anthropic Claude models. Detection accuracy may vary when using other LLM providers (Ollama, OpenRouter with non-Claude models, OpenAI-compatible endpoints). See the [Accuracy vs. Claude](#accuracy-vs-claude) section for details.
 
 ## License
 

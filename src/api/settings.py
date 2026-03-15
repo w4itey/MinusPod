@@ -10,7 +10,12 @@ from api import (
     api, log_request, json_response, error_response,
     get_database, _enrich_models_with_pricing, limiter,
 )
-from config import WHISPER_BACKEND_LOCAL, WHISPER_BACKEND_API
+from config import WHISPER_BACKEND_LOCAL, WHISPER_BACKEND_API, OPENROUTER_BASE_URL
+from llm_client import (
+    get_effective_provider, get_effective_base_url, get_api_key, get_effective_openrouter_api_key,
+    get_llm_client,
+    PROVIDER_ANTHROPIC, PROVIDER_OPENROUTER, PROVIDER_OPENAI_COMPATIBLE, PROVIDER_OLLAMA,
+)
 from utils.url import validate_url, validate_base_url, SSRFError
 from webhook_service import render_template_preview, fire_test_event, load_webhooks, VALID_EVENTS
 
@@ -37,8 +42,6 @@ def get_settings():
     from database import DEFAULT_SYSTEM_PROMPT, DEFAULT_VERIFICATION_PROMPT
     from ad_detector import AdDetector, DEFAULT_MODEL
     from chapters_generator import CHAPTERS_MODEL
-    from llm_client import get_effective_provider, get_effective_base_url, get_api_key, PROVIDER_ANTHROPIC
-
     settings = db.get_all_settings()
 
     # Shorthand for building {value, isDefault} response dicts
@@ -77,6 +80,8 @@ def get_settings():
     openai_base_url = get_effective_base_url()
     api_key = get_api_key()
     api_key_configured = bool(api_key and api_key != 'not-needed')
+    openrouter_api_key = get_effective_openrouter_api_key()
+    openrouter_api_key_configured = bool(openrouter_api_key)
 
     # Whisper backend settings (env var defaults)
     default_whisper_backend = os.environ.get('WHISPER_BACKEND', 'local')
@@ -100,6 +105,8 @@ def get_settings():
         'minCutConfidence': _sv('min_cut_confidence', min_cut_confidence),
         'llmProvider': _sv('llm_provider', llm_provider),
         'openaiBaseUrl': _sv('openai_base_url', openai_base_url),
+        'openrouterApiKeyConfigured': openrouter_api_key_configured,
+        'openrouterBaseUrl': OPENROUTER_BASE_URL,
         'whisperBackend': _sv('whisper_backend', whisper_backend),
         'whisperApiBaseUrl': _sv('whisper_api_base_url', whisper_api_base_url),
         'whisperApiKeyConfigured': bool(whisper_api_key),
@@ -119,6 +126,7 @@ def get_settings():
             'minCutConfidence': 0.80,
             'llmProvider': os.environ.get('LLM_PROVIDER', PROVIDER_ANTHROPIC),
             'openaiBaseUrl': os.environ.get('OPENAI_BASE_URL', 'http://localhost:8000/v1'),
+            'openrouterBaseUrl': OPENROUTER_BASE_URL,
             'whisperBackend': default_whisper_backend,
             'whisperApiBaseUrl': default_whisper_api_base_url,
             'whisperApiModel': default_whisper_api_model,
@@ -190,6 +198,15 @@ def update_ad_detection_settings():
 
     provider_changed = False
     if 'llmProvider' in data:
+        valid_llm_providers = (
+            PROVIDER_ANTHROPIC, PROVIDER_OPENROUTER,
+            PROVIDER_OPENAI_COMPATIBLE, PROVIDER_OLLAMA,
+            'openai', 'wrapper',  # legacy aliases in PROVIDERS_NON_ANTHROPIC
+        )
+        if data['llmProvider'] not in valid_llm_providers:
+            return json_response(
+                {'error': f'llmProvider must be one of: {", ".join(valid_llm_providers)}'}, 400
+            )
         db.set_setting('llm_provider', data['llmProvider'], is_default=False)
         logger.info(f"Updated LLM provider to: {data['llmProvider']}")
         provider_changed = True
@@ -203,13 +220,23 @@ def update_ad_detection_settings():
         logger.info(f"Updated OpenAI base URL to: {data['openaiBaseUrl']}")
         provider_changed = True
 
+    if 'openrouterApiKey' in data:
+        key = data['openrouterApiKey'].strip()
+        if key and not key.startswith('sk-or-'):
+            return json_response({'error': 'OpenRouter API key must start with sk-or-'}, 400)
+        db.set_setting('openrouter_api_key', key, is_default=False)
+        logger.info("Updated OpenRouter API key")
+        provider_changed = True
+
     if provider_changed:
-        from llm_client import get_llm_client
         get_llm_client(force_new=True)
 
     if 'whisperBackend' in data:
-        if data['whisperBackend'] not in (WHISPER_BACKEND_LOCAL, WHISPER_BACKEND_API):
-            return json_response({'error': 'whisperBackend must be "local" or "openai-api"'}, 400)
+        valid_whisper_backends = (WHISPER_BACKEND_LOCAL, WHISPER_BACKEND_API)
+        if data['whisperBackend'] not in valid_whisper_backends:
+            return json_response(
+                {'error': f'whisperBackend must be one of: {", ".join(valid_whisper_backends)}'}, 400
+            )
         db.set_setting('whisper_backend', data['whisperBackend'], is_default=False)
         logger.info(f"Updated whisper backend to: {data['whisperBackend']}")
 
@@ -255,9 +282,9 @@ def reset_ad_detection_settings():
     db.reset_setting('auto_process_enabled')
 
     # Reset LLM provider settings back to env var defaults
-    from llm_client import get_llm_client
     db.reset_setting('llm_provider')
     db.reset_setting('openai_base_url')
+    db.reset_setting('openrouter_api_key')
 
     # Reset whisper backend settings
     db.reset_setting('whisper_backend')
@@ -309,7 +336,6 @@ def get_available_models():
 @log_request
 def refresh_models():
     """Force refresh the model list from the LLM provider."""
-    from llm_client import get_llm_client
     from ad_detector import AdDetector
 
     get_llm_client(force_new=True)
