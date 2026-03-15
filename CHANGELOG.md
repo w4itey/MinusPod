@@ -6,6 +6,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.62] - 2026-03-15
+
+### Fixed
+- **RSS feed cache permanently stale on HTTP 304**: When upstream RSS returned 304 Not Modified, `last_checked_at` was not updated, causing every subsequent request to trigger a redundant refresh. Feeds polled frequently (e.g. PocketCasts every minute) would show thousands of minutes stale and make unnecessary upstream checks.
+- **OpenAI gpt-5-mini failing with max_tokens** (fixes #81): Newer OpenAI models require `max_completion_tokens` instead of `max_tokens`. The OpenAI-compatible client now tries `max_completion_tokens` first and falls back to `max_tokens` for older APIs, caching the result per model.
+
 ## [1.0.61] - 2026-03-15
 
 ### Security
