@@ -6,6 +6,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.61] - 2026-03-15
+
+### Security
+- **Remove system Python cryptography/PyJWT**: Docker Scout flagged CVEs in Ubuntu 24.04 system packages (`python3-cryptography 41.0.7`, `python3-jwt 2.7.0`) at `/usr/lib/python3/dist-packages/`. Our venv already has fixed versions; removed system copies that Scout was scanning. Fixes 6 CVEs.
+- **Upgrade setuptools, remove vendored jaraco/wheel**: setuptools bundles old copies of `jaraco.context` and `wheel` in its `_vendor/` directory. Upgraded setuptools and removed vendored copies. Fixes 2 CVEs.
+- **torch 2.6.0 CVEs (accepted risk)**: CVE-2025-3730 (Medium, fix: 2.8.0) and CVE-2025-2953 (Low, fix: 2.7.1-rc1) are DoS-only in functions (`ctc_loss`, `mkldnn_max_pool2d`) not used by our pipeline. No stable fix available yet.
+
 ## [1.0.60] - 2026-03-15
 
 ### Security

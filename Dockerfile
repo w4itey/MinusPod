@@ -33,6 +33,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsndfile1 \
     libchromaprint-tools \
     && apt-get upgrade -y \
+    && rm -rf /usr/lib/python3/dist-packages/cryptography* \
+              /usr/lib/python3/dist-packages/PyJWT* \
+              /usr/lib/python3/dist-packages/jwt* \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # Set python3.11 as default, create venv for all pip installs
@@ -43,7 +46,9 @@ RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
 
 ENV PATH="/opt/venv/bin:$PATH"
 
-RUN pip install --no-cache-dir --upgrade pip
+RUN pip install --no-cache-dir --upgrade pip setuptools \
+    && rm -rf /opt/venv/lib/python3.11/site-packages/setuptools/_vendor/jaraco* \
+              /opt/venv/lib/python3.11/site-packages/setuptools/_vendor/wheel*
 
 # Set working directory
 WORKDIR /app
