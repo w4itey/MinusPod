@@ -6,6 +6,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.73] - 2026-03-16
+
+### Fixed
+- **FFMPEG timeout on long episodes (Issue #88)**: FFMPEG ad-removal timeout now scales with episode duration (5 min base + 5 sec per minute of audio) instead of a hardcoded 300s. A 107-minute episode now gets ~14 minutes instead of 5. Audio preprocessing timeout also scales by file size. Fixes consistent failures on emulated platforms (e.g. amd64 Docker on ARM Macs via Orbstack).
+
+### Changed
+- **Dockerfile**: Removed hardcoded `--platform=linux/amd64` from both build stages. Platform should be passed via `docker build --platform` or `docker-compose` config instead of baked into the Dockerfile.
+
 ## [1.0.72] - 2026-03-16
 
 ### Fixed
