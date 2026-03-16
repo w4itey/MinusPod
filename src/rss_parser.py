@@ -299,7 +299,7 @@ class RSSParser:
         lines.append('<item>')
         lines.append(f'  <title>{self._escape_xml(ep.get("title") or "Unknown")}</title>')
         if ep.get('description'):
-            lines.append(f'  <description>{self._escape_xml(ep["description"])}</description>')
+            lines.append(f'  <description><![CDATA[{ep["description"]}]]></description>')
         lines.append(f'  <enclosure url="{modified_url}" type="audio/mpeg" />')
         lines.append(f'  <guid isPermaLink="false">{ep_id}</guid>')
         if ep.get('published_at'):
@@ -326,25 +326,25 @@ class RSSParser:
         """Extract episode description with fallback to iTunes fields.
 
         Many feeds (e.g. Relay FM) leave <description> empty and put the
-        actual episode summary in <itunes:summary>, <itunes:subtitle>,
-        or <content:encoded>.  Feedparser exposes these as 'summary',
-        'subtitle', and 'content' respectively.
+        actual episode summary in <itunes:subtitle> or <content:encoded>.
+        Feedparser exposes these as 'subtitle' and 'content' respectively.
+
+        Note: the returned value may contain raw HTML (especially from
+        content:encoded). Callers should wrap in CDATA rather than
+        XML-escaping.
         """
+        # feedparser aliases <description> and 'summary' to the same value,
+        # so checking both is redundant -- just check 'description'.
         desc = entry.get('description', '') or ''
         if desc.strip():
             return desc
-
-        # feedparser merges <description> into 'summary'; try it next
-        summary = entry.get('summary', '') or ''
-        if summary.strip():
-            return summary
 
         # <itunes:subtitle> -> 'subtitle'
         subtitle = entry.get('subtitle', '') or ''
         if subtitle.strip():
             return subtitle
 
-        # <content:encoded> -> 'content' list
+        # <content:encoded> -> 'content' list (may contain HTML)
         content = entry.get('content', [])
         if content and isinstance(content, list):
             value = content[0].get('value', '') or ''
