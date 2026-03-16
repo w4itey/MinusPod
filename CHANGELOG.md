@@ -6,6 +6,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.71] - 2026-03-16
+
+### Fixed
+- **Stuck episode processing (fingerprint loop)**: Audio fingerprint scanning now has a 10-minute timeout (was unbounded). A 176-minute episode could spawn ~5,280 subprocess iterations with no escape. Scanning now logs progress every 60 seconds, checks for cancellation each iteration, and returns partial results on timeout.
+- **Cancel not respected during ad detection**: Cancel events are now checked between all three ad detection stages (fingerprint, text pattern, Claude API) and within the fingerprint scan loop itself. Previously, cancellation was only checked between top-level pipeline stages.
+- **Processing queue force-clear safety net**: Jobs stuck for over 2 hours are now force-cleared from the processing queue, even when the lock is held by the same process. This prevents a hung processing thread from blocking all future episode processing indefinitely.
+
 ## [1.0.70] - 2026-03-15
 
 ### Fixed
