@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `_segments_to_text()` in roll_detector.py (replaced by `get_transcript_text_for_range()` from utils).
 - `get_transcript_text_for_range()` in ad_detector.py (moved to utils/text.py).
 - `httpx` dependency usage in llm_client.py (replaced with `requests`).
+- Legacy `openai` and `wrapper` provider aliases from `PROVIDERS_NON_ANTHROPIC` -- standardized on `openai-compatible` and `ollama` only.
 
 ## [1.0.82] - 2026-03-17
 

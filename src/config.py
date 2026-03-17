@@ -230,7 +230,7 @@ PROVIDER_ANTHROPIC = 'anthropic'
 PROVIDER_OPENROUTER = 'openrouter'
 PROVIDER_OPENAI_COMPATIBLE = 'openai-compatible'
 PROVIDER_OLLAMA = 'ollama'
-PROVIDERS_NON_ANTHROPIC = ('openai-compatible', 'openai', 'wrapper', 'ollama')
+PROVIDERS_NON_ANTHROPIC = ('openai-compatible', 'ollama')
 
 # ============================================================
 # Default LLM Models

@@ -206,7 +206,6 @@ def update_ad_detection_settings():
         valid_llm_providers = (
             PROVIDER_ANTHROPIC, PROVIDER_OPENROUTER,
             PROVIDER_OPENAI_COMPATIBLE, PROVIDER_OLLAMA,
-            'openai', 'wrapper',  # legacy aliases in PROVIDERS_NON_ANTHROPIC
         )
         if data['llmProvider'] not in valid_llm_providers:
             return json_response(
