@@ -3,7 +3,6 @@ import logging
 import json
 import re
 import time
-import random
 from typing import List, Dict, Optional
 
 from cancel import _check_cancel
@@ -13,6 +12,8 @@ from llm_client import (
     get_llm_timeout, get_llm_max_retries,
     get_effective_provider, model_matches_provider,
 )
+from utils.retry import calculate_backoff
+from utils.text import get_transcript_text_for_range
 from utils.time import parse_timestamp, first_not_none
 
 from config import (
@@ -34,8 +35,6 @@ from utils.constants import (
 
 logger = logging.getLogger('podcast.claude')
 
-# Default model - imported from config, re-exported for downstream consumers
-DEFAULT_MODEL = DEFAULT_AD_DETECTION_MODEL
 
 # User prompt template (not configurable via UI - just formats the transcript)
 # Description is optional - may contain sponsor lists, chapter markers, or content context
@@ -44,15 +43,6 @@ Episode: {episode_title}
 {description_section}
 Transcript:
 {transcript}"""
-
-# Retry configuration for transient API errors
-RETRY_CONFIG = {
-    'max_retries': 3,
-    'base_delay': 2.0,      # seconds
-    'max_delay': 60.0,      # seconds
-    'exponential_base': 2,
-    'jitter': True          # Add random jitter to prevent thundering herd
-}
 
 # Sliding window step (derived from config values)
 # WINDOW_SIZE_SECONDS and WINDOW_OVERLAP_SECONDS imported from config.py
@@ -498,23 +488,6 @@ def extract_sponsor_names(text: str, ad_reason: str = None) -> set:
     return sponsors
 
 
-def get_transcript_text_for_range(segments: List[Dict], start_time: float, end_time: float) -> str:
-    """Get concatenated transcript text for a time range.
-
-    Args:
-        segments: List of transcript segments
-        start_time: Start of range in seconds
-        end_time: End of range in seconds
-
-    Returns:
-        Concatenated text from all segments in range
-    """
-    texts = []
-    for seg in segments:
-        # Include segment if it overlaps with the range
-        if seg['end'] >= start_time and seg['start'] <= end_time:
-            texts.append(seg.get('text', ''))
-    return ' '.join(texts)
 
 
 # --- Timestamp validation (Fix 1: Claude hallucination correction) ---
@@ -1153,7 +1126,7 @@ class AdDetector:
                 return model
         except Exception as e:
             logger.warning(f"Could not load model from DB: {e}")
-        return DEFAULT_MODEL
+        return DEFAULT_AD_DETECTION_MODEL
 
     def get_verification_model(self) -> str:
         """Get verification pass model from database or fall back to first pass model."""
@@ -1261,12 +1234,12 @@ class AdDetector:
                 return response, None
             except Exception as e:
                 last_error = e
-                if self._is_retryable_error(e) and attempt < max_retries:
+                if is_retryable_error(e) and attempt < max_retries:
                     if is_rate_limit_error(e):
                         delay = 60.0
                         logger.warning(f"[{slug}:{episode_id}] {window_label} rate limit, waiting {delay:.0f}s")
                     else:
-                        delay = self._calculate_backoff(attempt)
+                        delay = calculate_backoff(attempt)
                         logger.warning(f"[{slug}:{episode_id}] {window_label} API error: {e}. Retrying in {delay:.1f}s")
                     time.sleep(delay)
                     continue
@@ -1275,7 +1248,7 @@ class AdDetector:
                     break
 
         # Per-window retry for transient failures (intermittent 400s/500s)
-        if response is None and last_error is not None and self._is_retryable_error(last_error):
+        if response is None and last_error is not None and is_retryable_error(last_error):
             for retry_num, delay in enumerate([2, 5], 1):
                 logger.warning(
                     f"[{slug}:{episode_id}] {window_label} per-window retry "
@@ -1294,19 +1267,6 @@ class AdDetector:
 
         return None, last_error
 
-    def _is_retryable_error(self, error: Exception) -> bool:
-        """Check if an error is transient and should be retried."""
-        return is_retryable_error(error)
-
-    def _calculate_backoff(self, attempt: int) -> float:
-        """Calculate exponential backoff delay with optional jitter."""
-        delay = min(
-            RETRY_CONFIG['base_delay'] * (RETRY_CONFIG['exponential_base'] ** attempt),
-            RETRY_CONFIG['max_delay']
-        )
-        if RETRY_CONFIG['jitter']:
-            delay = delay * (0.5 + random.random())  # 50-150% of delay
-        return delay
 
     def _extract_json_ads_array(self, response_text: str, slug: str = None,
                                 episode_id: str = None):
@@ -1865,7 +1825,7 @@ class AdDetector:
 
         except Exception as e:
             logger.error(f"[{slug}:{episode_id}] Ad detection failed: {e}")
-            return {"ads": [], "status": "failed", "error": str(e), "retryable": self._is_retryable_error(e)}
+            return {"ads": [], "status": "failed", "error": str(e), "retryable": is_retryable_error(e)}
 
     def process_transcript(self, segments: List[Dict], podcast_name: str = "Unknown",
                           episode_title: str = "Unknown", slug: str = None,
@@ -2199,7 +2159,7 @@ class AdDetector:
             return sponsor
         return None
 
-    def _learn_from_detections(
+    def learn_from_detections(
         self, ads: List[Dict], segments: List[Dict], podcast_id: str,
         episode_id: str = None, audio_path: str = None
     ) -> int:
@@ -2626,5 +2586,5 @@ class AdDetector:
 
         except Exception as e:
             logger.error(f"[{slug}:{episode_id}] Verification detection failed: {e}")
-            return {"ads": [], "status": "failed", "error": str(e), "retryable": self._is_retryable_error(e)}
+            return {"ads": [], "status": "failed", "error": str(e), "retryable": is_retryable_error(e)}
 

@@ -387,64 +387,37 @@ class StatsMixin:
         return entries, total_count
 
     def get_processing_history_stats(self) -> Dict:
-        """Get aggregate statistics from processing history."""
+        """Get aggregate statistics from processing history in a single query."""
         conn = self.get_connection()
 
-        # Total processed
-        cursor = conn.execute("SELECT COUNT(*) FROM processing_history")
-        total_processed = cursor.fetchone()[0]
-
-        # Completed count
-        cursor = conn.execute("SELECT COUNT(*) FROM processing_history WHERE status = 'completed'")
-        completed_count = cursor.fetchone()[0]
-
-        # Failed count
-        cursor = conn.execute("SELECT COUNT(*) FROM processing_history WHERE status = 'failed'")
-        failed_count = cursor.fetchone()[0]
-
-        # Average processing time (for completed only)
         cursor = conn.execute(
-            """SELECT AVG(processing_duration_seconds)
-               FROM processing_history
-               WHERE status = 'completed' AND processing_duration_seconds IS NOT NULL"""
-        )
-        avg_time = cursor.fetchone()[0] or 0
-
-        # Total ads detected
-        cursor = conn.execute("SELECT SUM(ads_detected) FROM processing_history WHERE status = 'completed'")
-        total_ads = cursor.fetchone()[0] or 0
-
-        # Reprocess count (entries with reprocess_number > 1)
-        cursor = conn.execute("SELECT COUNT(*) FROM processing_history WHERE reprocess_number > 1")
-        reprocess_count = cursor.fetchone()[0]
-
-        # Unique episodes processed
-        cursor = conn.execute("SELECT COUNT(DISTINCT podcast_slug || '/' || episode_id) FROM processing_history")
-        unique_episodes = cursor.fetchone()[0]
-
-        # LLM token/cost totals from completed entries
-        cursor = conn.execute(
-            """SELECT COALESCE(SUM(input_tokens), 0) AS total_input_tokens,
-                      COALESCE(SUM(output_tokens), 0) AS total_output_tokens,
-                      COALESCE(SUM(llm_cost), 0.0) AS total_llm_cost
-               FROM processing_history WHERE status = 'completed'"""
+            """SELECT
+                COUNT(*) AS total_processed,
+                COUNT(CASE WHEN status = 'completed' THEN 1 END) AS completed_count,
+                COUNT(CASE WHEN status = 'failed' THEN 1 END) AS failed_count,
+                AVG(CASE WHEN status = 'completed' AND processing_duration_seconds IS NOT NULL
+                         THEN processing_duration_seconds END) AS avg_time,
+                COALESCE(SUM(CASE WHEN status = 'completed' THEN ads_detected END), 0) AS total_ads,
+                COUNT(CASE WHEN reprocess_number > 1 THEN 1 END) AS reprocess_count,
+                COUNT(DISTINCT podcast_slug || '/' || episode_id) AS unique_episodes,
+                COALESCE(SUM(CASE WHEN status = 'completed' THEN input_tokens END), 0) AS total_input_tokens,
+                COALESCE(SUM(CASE WHEN status = 'completed' THEN output_tokens END), 0) AS total_output_tokens,
+                COALESCE(SUM(CASE WHEN status = 'completed' THEN llm_cost END), 0.0) AS total_llm_cost
+            FROM processing_history"""
         )
         row = cursor.fetchone()
-        total_input_tokens = row['total_input_tokens']
-        total_output_tokens = row['total_output_tokens']
-        total_llm_cost = row['total_llm_cost']
 
         return {
-            'total_processed': total_processed,
-            'completed_count': completed_count,
-            'failed_count': failed_count,
-            'avg_processing_time_seconds': round(avg_time, 2),
-            'total_ads_detected': total_ads,
-            'reprocess_count': reprocess_count,
-            'unique_episodes': unique_episodes,
-            'total_input_tokens': total_input_tokens,
-            'total_output_tokens': total_output_tokens,
-            'total_llm_cost': round(total_llm_cost, 6),
+            'total_processed': row['total_processed'],
+            'completed_count': row['completed_count'],
+            'failed_count': row['failed_count'],
+            'avg_processing_time_seconds': round(row['avg_time'] or 0, 2),
+            'total_ads_detected': row['total_ads'],
+            'reprocess_count': row['reprocess_count'],
+            'unique_episodes': row['unique_episodes'],
+            'total_input_tokens': row['total_input_tokens'],
+            'total_output_tokens': row['total_output_tokens'],
+            'total_llm_cost': round(row['total_llm_cost'], 6),
         }
 
     def get_episode_reprocess_count(self, podcast_id: int, episode_id: str) -> int:

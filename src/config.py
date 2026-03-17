@@ -224,6 +224,15 @@ WHISPER_MEMORY_PROFILES = {
 WHISPER_DEFAULT_PROFILE = (5.0, 0.20)  # Conservative default (medium-like)
 
 # ============================================================
+# LLM Provider Constants
+# ============================================================
+PROVIDER_ANTHROPIC = 'anthropic'
+PROVIDER_OPENROUTER = 'openrouter'
+PROVIDER_OPENAI_COMPATIBLE = 'openai-compatible'
+PROVIDER_OLLAMA = 'ollama'
+PROVIDERS_NON_ANTHROPIC = ('openai-compatible', 'ollama')
+
+# ============================================================
 # Default LLM Models
 # ============================================================
 DEFAULT_AD_DETECTION_MODEL = "claude-sonnet-4-5-20250929"
@@ -277,16 +286,16 @@ def get_pricing_source(provider: str, base_url: str = '') -> dict:
       'type': 'openrouter_api' | 'pricepertoken' | 'free' | 'unknown'
       'url': full URL to fetch (for openrouter_api and pricepertoken types)
     """
-    if provider == 'ollama':
+    if provider == PROVIDER_OLLAMA:
         return {'type': 'free'}
 
-    if provider == 'openrouter':
+    if provider == PROVIDER_OPENROUTER:
         return {
             'type': 'openrouter_api',
             'url': 'https://openrouter.ai/api/v1/models',
         }
 
-    if provider == 'anthropic':
+    if provider == PROVIDER_ANTHROPIC:
         return {
             'type': 'pricepertoken',
             'url': 'https://pricepertoken.com/pricing-page/provider/anthropic',

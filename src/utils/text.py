@@ -9,6 +9,57 @@ from typing import List, Optional
 from utils.time import parse_timestamp
 
 
+def parse_transcript_segments(transcript_text: str) -> List[dict]:
+    """Parse VTT-formatted transcript text into segment dicts.
+
+    Parses lines in the format:
+    [HH:MM:SS.mmm --> HH:MM:SS.mmm] Text content here
+
+    Args:
+        transcript_text: Raw transcript string with timestamped lines
+
+    Returns:
+        List of dicts with 'start', 'end', 'text' keys
+    """
+    segments: List[dict] = []
+    for line in transcript_text.split('\n'):
+        if line.strip() and line.startswith('['):
+            try:
+                time_part, text_part = line.split('] ', 1)
+                time_range = time_part.strip('[')
+                start_str, end_str = time_range.split(' --> ')
+                segments.append({
+                    'start': parse_timestamp(start_str),
+                    'end': parse_timestamp(end_str),
+                    'text': text_part,
+                })
+            except (ValueError, TypeError):
+                continue
+    return segments
+
+
+def get_transcript_text_for_range(
+    segments: List[dict],
+    start_time: float,
+    end_time: float,
+) -> str:
+    """Get concatenated transcript text for a time range.
+
+    Args:
+        segments: List of transcript segment dicts with 'start', 'end', 'text'
+        start_time: Start of range in seconds
+        end_time: End of range in seconds
+
+    Returns:
+        Concatenated text from all overlapping segments
+    """
+    texts = []
+    for seg in segments:
+        if seg['end'] >= start_time and seg['start'] <= end_time:
+            texts.append(seg.get('text', ''))
+    return ' '.join(texts)
+
+
 def extract_text_in_range(
     transcript: str,
     start: float,

@@ -3,7 +3,7 @@ import os
 import tempfile
 from unittest.mock import patch, MagicMock
 
-from transcriber import Transcriber, _get_whisper_settings, calculate_optimal_chunk_duration, _LEGACY_BACKEND_OPENROUTER
+from transcriber import Transcriber, _get_whisper_settings, calculate_optimal_chunk_duration
 from config import (
     API_CHUNK_DURATION_SECONDS,
     WHISPER_BACKEND_LOCAL,
@@ -70,20 +70,6 @@ class TestGetWhisperSettings:
         assert settings['api_base_url'] == 'http://example.com/v1'
         assert settings['api_key'] == 'key123'
         assert settings['api_model'] == 'model-x'
-
-
-    def test_openrouter_backend_falls_back_to_local(self):
-        """Legacy openrouter-api backend in DB should gracefully fall back to local and write back."""
-        mock_db = _mock_db_with_settings({
-            'whisper_backend': _LEGACY_BACKEND_OPENROUTER,
-            'whisper_api_model': 'openai/whisper-large-v3-turbo',
-        })
-        with patch('database.Database', return_value=mock_db):
-            settings = _get_whisper_settings()
-        assert settings['backend'] == WHISPER_BACKEND_LOCAL
-        mock_db.set_setting.assert_called_once_with(
-            'whisper_backend', WHISPER_BACKEND_LOCAL, is_default=False
-        )
 
 
 class TestApiChunkDuration:

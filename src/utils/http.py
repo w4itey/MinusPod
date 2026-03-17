@@ -13,32 +13,35 @@ def is_retryable_status(status_code: int) -> bool:
     return status_code == 429 or status_code >= 500
 
 
-def post_with_retry(
+def _request_with_retry(
+    method: str,
     url: str,
     max_retries: int = 3,
     timeout: int = 300,
     log_prefix: str = "HTTP",
     **kwargs,
 ) -> Optional[requests.Response]:
-    """POST with exponential backoff retry on transient errors.
+    """HTTP request with exponential backoff retry on transient errors.
 
     Retries on 429, 5xx, Timeout, and ConnectionError.
     Returns None if all retries are exhausted.
 
     Args:
-        url: The URL to POST to.
+        method: HTTP method ("get" or "post").
+        url: The URL to request.
         max_retries: Maximum number of attempts.
         timeout: Request timeout in seconds.
         log_prefix: Prefix for log messages.
-        **kwargs: Passed through to requests.post().
+        **kwargs: Passed through to requests.get()/post().
 
     Returns:
         The successful Response (2xx), or None on permanent failure.
     """
+    request_fn = requests.get if method == "get" else requests.post
     response = None
     for attempt in range(max_retries):
         try:
-            response = requests.post(url, timeout=timeout, **kwargs)
+            response = request_fn(url, timeout=timeout, **kwargs)
 
             if response.ok:
                 return response
@@ -78,3 +81,27 @@ def post_with_retry(
     if response is not None:
         logger.error(f"{log_prefix} failed after {max_retries} attempts: {response.status_code}")
     return None
+
+
+def post_with_retry(
+    url: str,
+    max_retries: int = 3,
+    timeout: int = 300,
+    log_prefix: str = "HTTP",
+    **kwargs,
+) -> Optional[requests.Response]:
+    """POST with exponential backoff retry. See _request_with_retry for details."""
+    return _request_with_retry("post", url, max_retries=max_retries,
+                               timeout=timeout, log_prefix=log_prefix, **kwargs)
+
+
+def get_with_retry(
+    url: str,
+    max_retries: int = 3,
+    timeout: int = 30,
+    log_prefix: str = "HTTP",
+    **kwargs,
+) -> Optional[requests.Response]:
+    """GET with exponential backoff retry. See _request_with_retry for details."""
+    return _request_with_retry("get", url, max_retries=max_retries,
+                               timeout=timeout, log_prefix=log_prefix, **kwargs)

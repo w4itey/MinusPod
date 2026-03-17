@@ -136,6 +136,21 @@ def adjust_timestamp(original_time: float, ads_removed: List[Dict]) -> float:
     return max(0.0, original_time - adjustment)
 
 
+def parse_iso_datetime(value: str) -> datetime:
+    """Parse an ISO 8601 datetime string to a timezone-aware datetime.
+
+    Handles the 'Z' suffix that Python's fromisoformat() doesn't support
+    before Python 3.11.
+
+    Args:
+        value: ISO 8601 string (e.g. '2024-01-15T12:00:00Z' or '2024-01-15T12:00:00+00:00')
+
+    Returns:
+        Timezone-aware datetime object
+    """
+    return datetime.fromisoformat(value.replace('Z', '+00:00'))
+
+
 def first_not_none(*values):
     """Return the first value that is not None.
 

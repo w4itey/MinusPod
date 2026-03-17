@@ -1,19 +1,18 @@
 """Outbound webhook dispatch with Jinja2 custom payload templates."""
 
-import datetime
 import hashlib
 import hmac
 import json
 import logging
 import os
 import threading
-import time
-import urllib.request
-import urllib.error
+from dataclasses import dataclass
+from typing import Optional
 
 from jinja2 import TemplateError
 from jinja2.sandbox import SandboxedEnvironment
 
+from utils.http import post_with_retry
 from utils.time import utc_now_iso
 from utils.url import validate_url, SSRFError
 
@@ -23,14 +22,29 @@ EVENT_EPISODE_PROCESSED = 'Episode Processed'
 EVENT_EPISODE_FAILED = 'Episode Failed'
 VALID_EVENTS = {EVENT_EPISODE_PROCESSED, EVENT_EPISODE_FAILED}
 
-_RETRY_ATTEMPTS = 2
-_RETRY_DELAY_SECS = 2
 _REQUEST_TIMEOUT_SECS = 5
 
 _sandbox_env = SandboxedEnvironment()
 
+
+@dataclass
+class WebhookPayload:
+    """Structured payload for webhook events."""
+    event: str
+    episode_id: str
+    slug: str
+    episode_title: str
+    processing_time: Optional[float] = None
+    llm_cost: Optional[float] = None
+    ads_removed: int = 0
+    error_message: Optional[str] = None
+    original_duration: Optional[float] = None
+    new_duration: Optional[float] = None
+    podcast_name: Optional[str] = None
+
+
 def _format_duration(seconds):
-    """Format seconds as M:SS or H:MM:SS."""
+    """Format seconds as M:SS or H:MM:SS for webhook payloads."""
     if seconds is None:
         return None
     total = int(seconds)
@@ -72,43 +86,39 @@ _DUMMY_CONTEXT = {
 }
 
 
-def _build_context(event, episode_id, slug, episode_title, processing_time,
-                   llm_cost, ads_removed, error_message, original_duration,
-                   new_duration, podcast_name=None):
+def _build_context(payload: WebhookPayload) -> dict:
     """Build the template/payload context dict for a webhook event."""
     ui_base_url = os.environ.get('UI_BASE_URL') or os.environ.get('BASE_URL', 'http://localhost:8000')
-    episode_url = f"{ui_base_url}/ui/feeds/{slug}/episodes/{episode_id}"
+    episode_url = f"{ui_base_url}/ui/feeds/{payload.slug}/episodes/{payload.episode_id}"
 
-    if original_duration is not None and new_duration is not None:
-        time_saved_secs = round(original_duration - new_duration, 2)
+    if payload.original_duration is not None and payload.new_duration is not None:
+        time_saved_secs = round(payload.original_duration - payload.new_duration, 2)
     else:
         time_saved_secs = None
 
-    rounded_processing = round(processing_time, 2) if processing_time is not None else None
-    rounded_cost = round(llm_cost, 6) if llm_cost is not None else None
+    rounded_processing = round(payload.processing_time, 2) if payload.processing_time is not None else None
+    rounded_cost = round(payload.llm_cost, 6) if payload.llm_cost is not None else None
 
     return {
-        'event': event,
-        'timestamp': datetime.datetime.now(datetime.timezone.utc).strftime(
-            '%Y-%m-%dT%H:%M:%SZ'
-        ),
+        'event': payload.event,
+        'timestamp': utc_now_iso(),
         'podcast': {
-            'name': podcast_name or slug,
-            'slug': slug,
+            'name': payload.podcast_name or payload.slug,
+            'slug': payload.slug,
         },
         'episode': {
-            'id': episode_id,
-            'title': episode_title,
-            'slug': slug,
+            'id': payload.episode_id,
+            'title': payload.episode_title,
+            'slug': payload.slug,
             'url': episode_url,
-            'ads_removed': ads_removed,
+            'ads_removed': payload.ads_removed,
             'processing_time_secs': rounded_processing,
             'processing_time': _format_duration(rounded_processing),
             'llm_cost': rounded_cost,
             'llm_cost_display': _format_cost(rounded_cost),
             'time_saved_secs': time_saved_secs,
             'time_saved': _format_duration(time_saved_secs),
-            'error_message': error_message,
+            'error_message': payload.error_message,
         },
     }
 
@@ -119,38 +129,8 @@ def _render_template(template_str, context):
     return template.render(**context)
 
 
-def _dispatch_webhook(url, body_bytes, headers, max_attempts=_RETRY_ATTEMPTS):
-    """POST body_bytes to url with retry logic. Fire-and-forget."""
-    for attempt in range(1, max_attempts + 1):
-        try:
-            req = urllib.request.Request(
-                url, data=body_bytes, headers=headers, method='POST'
-            )
-            with urllib.request.urlopen(req, timeout=_REQUEST_TIMEOUT_SECS) as resp:
-                logger.info(
-                    "Webhook delivered to %s (attempt %d, status %d)",
-                    url, attempt, resp.status,
-                )
-                return resp.status
-        except (urllib.error.URLError, urllib.error.HTTPError, OSError) as exc:
-            logger.warning(
-                "Webhook delivery to %s failed (attempt %d/%d): %s",
-                url, attempt, max_attempts, exc,
-            )
-            if attempt < max_attempts:
-                time.sleep(_RETRY_DELAY_SECS)
-        except Exception:
-            logger.exception(
-                "Unexpected error dispatching webhook to %s (attempt %d/%d)",
-                url, attempt, max_attempts,
-            )
-            if attempt < max_attempts:
-                time.sleep(_RETRY_DELAY_SECS)
-    return None
-
-
 def _prepare_and_dispatch(webhook_config, context, add_test_flag=False,
-                          max_attempts=_RETRY_ATTEMPTS):
+                          max_attempts=2):
     """Render payload and dispatch to a single webhook. Returns HTTP status or None."""
     url = webhook_config.get('url')
     if not url:
@@ -191,7 +171,18 @@ def _prepare_and_dispatch(webhook_config, context, add_test_flag=False,
         ).hexdigest()
         headers['X-MinusPod-Signature'] = f"sha256={sig}"
 
-    return _dispatch_webhook(url, body_bytes, headers, max_attempts=max_attempts)
+    resp = post_with_retry(
+        url,
+        max_retries=max_attempts,
+        timeout=_REQUEST_TIMEOUT_SECS,
+        log_prefix=f"Webhook({url})",
+        data=body_bytes,
+        headers=headers,
+    )
+    if resp is not None:
+        logger.info("Webhook delivered to %s (status %d)", url, resp.status_code)
+        return resp.status_code
+    return None
 
 
 def load_webhooks(db=None):
@@ -210,24 +201,18 @@ def load_webhooks(db=None):
         return []
 
 
-def _fire_event_sync(event, episode_id, slug, episode_title, processing_time,
-                     llm_cost, ads_removed, error_message, original_duration,
-                     new_duration, podcast_name=None):
+def _fire_event_sync(payload: WebhookPayload):
     """Synchronous webhook dispatch -- called in a daemon thread by fire_event."""
     webhooks = load_webhooks()
     if not webhooks:
         return
 
-    context = _build_context(
-        event, episode_id, slug, episode_title, processing_time,
-        llm_cost, ads_removed, error_message, original_duration, new_duration,
-        podcast_name=podcast_name,
-    )
+    context = _build_context(payload)
 
     for wh in webhooks:
         if not wh.get('enabled', False):
             continue
-        if event not in wh.get('events', []):
+        if payload.event not in wh.get('events', []):
             continue
         try:
             _prepare_and_dispatch(wh, context)
@@ -247,11 +232,23 @@ def fire_event(event, episode_id, slug, episode_title, processing_time,
         logger.error("Invalid webhook event: %s", event)
         return
 
+    payload = WebhookPayload(
+        event=event,
+        episode_id=episode_id,
+        slug=slug,
+        episode_title=episode_title,
+        processing_time=processing_time,
+        llm_cost=llm_cost,
+        ads_removed=ads_removed,
+        error_message=error_message,
+        original_duration=original_duration,
+        new_duration=new_duration,
+        podcast_name=podcast_name,
+    )
+
     thread = threading.Thread(
         target=_fire_event_sync,
-        args=(event, episode_id, slug, episode_title, processing_time,
-              llm_cost, ads_removed, error_message, original_duration,
-              new_duration, podcast_name),
+        args=(payload,),
         daemon=True,
     )
     thread.start()
@@ -284,7 +281,7 @@ def fire_test_event(webhook_config):
     try:
         row = db.get_latest_completed_processing()
         if row:
-            context = _build_context(
+            payload = WebhookPayload(
                 event=EVENT_EPISODE_PROCESSED,
                 episode_id=row['episode_id'],
                 slug=row['podcast_slug'],
@@ -292,11 +289,11 @@ def fire_test_event(webhook_config):
                 processing_time=row['processing_duration_seconds'],
                 llm_cost=row['llm_cost'],
                 ads_removed=row['ads_detected'],
-                error_message=None,
                 original_duration=row['original_duration'],
                 new_duration=row['new_duration'],
                 podcast_name=row.get('podcast_title'),
             )
+            context = _build_context(payload)
     except Exception:
         logger.debug("Could not load real data for test webhook, using placeholders")
 

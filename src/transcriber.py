@@ -44,10 +44,6 @@ from faster_whisper import WhisperModel, BatchedInferencePipeline
 
 logger = logging.getLogger(__name__)
 
-# Legacy backend identifier for graceful DB migration (removed in v1.0.68)
-_LEGACY_BACKEND_OPENROUTER = 'openrouter-api'
-_openrouter_migration_warned = False
-
 # Maximum segment duration for precise ad detection
 MAX_SEGMENT_DURATION = 15.0  # seconds
 
@@ -291,29 +287,8 @@ def _get_whisper_settings() -> Dict[str, str]:
             val = db.get_setting(setting_key)
             if val:
                 defaults[default_key] = val
-
-        # Graceful migration: openrouter-api whisper backend was removed in v1.0.68.
-        # Write the corrected value back so the fallback only runs once.
-        if defaults['backend'] == _LEGACY_BACKEND_OPENROUTER:
-            global _openrouter_migration_warned
-            if not _openrouter_migration_warned:
-                logger.warning(
-                    "OpenRouter Whisper backend is no longer supported (endpoint does not exist). "
-                    "Falling back to local whisper."
-                )
-                _openrouter_migration_warned = True
-            defaults['backend'] = WHISPER_BACKEND_LOCAL
-            db.set_setting('whisper_backend', WHISPER_BACKEND_LOCAL, is_default=False)
     except Exception as e:
         logger.warning(f"Could not read whisper settings from DB, using env defaults: {e}")
-
-    # Handle env-var-sourced legacy value (no DB to write back to)
-    if defaults['backend'] == _LEGACY_BACKEND_OPENROUTER:
-        logger.warning(
-            "WHISPER_BACKEND=openrouter-api is no longer supported. Falling back to local whisper. "
-            "Update your environment variable to WHISPER_BACKEND=local or WHISPER_BACKEND=openai-api."
-        )
-        defaults['backend'] = WHISPER_BACKEND_LOCAL
 
     return defaults
 
@@ -418,15 +393,19 @@ class WhisperModelSingleton:
         logger.info("Whisper model marked for reload")
 
     @classmethod
-    def _should_reload(cls) -> bool:
-        """Check if model needs to be reloaded."""
-        if cls._needs_reload:
-            return True
+    def _should_reload(cls) -> Optional[str]:
+        """Check if model needs to be reloaded.
+
+        Returns the configured model name if a reload is needed, None otherwise.
+        This avoids a duplicate DB query in get_instance().
+        """
         configured = cls.get_configured_model()
+        if cls._needs_reload:
+            return configured
         if cls._current_model_name and cls._current_model_name != configured:
             logger.info(f"Model changed from {cls._current_model_name} to {configured}")
-            return True
-        return False
+            return configured
+        return None
 
     @classmethod
     def unload_model(cls):
@@ -457,11 +436,12 @@ class WhisperModelSingleton:
                                                           and batched pipeline for transcription
         """
         # Check if we need to reload
-        if cls._instance is not None and cls._should_reload():
+        reload_model = cls._should_reload() if cls._instance is not None else None
+        if reload_model:
             cls.unload_model()
 
         if cls._instance is None:
-            model_size = cls.get_configured_model()
+            model_size = reload_model or cls.get_configured_model()
             device = os.getenv("WHISPER_DEVICE", "cpu")
 
             # Check CUDA availability and set compute type
@@ -1123,7 +1103,7 @@ class Transcriber:
                             last_log_time = segment.end
                             # Log the last segment's text (truncated)
                             text_preview = segment.text.strip()[:100] + "..." if len(segment.text.strip()) > 100 else segment.text.strip()
-                            logger.info(f"[{self.format_timestamp(segment.start)}] {text_preview}")
+                            logger.info(f"[{format_vtt_timestamp(segment.start)}] {text_preview}")
 
                     # Filter out hallucinations
                     original_count = len(result)
@@ -1369,10 +1349,6 @@ class Transcriber:
         )
 
         return all_segments
-
-    def format_timestamp(self, seconds: float) -> str:
-        """Convert seconds to VTT timestamp format (HH:MM:SS.mmm)."""
-        return format_vtt_timestamp(seconds)
 
     def segments_to_text(self, segments: List[Dict]) -> str:
         """Convert segments to readable text format."""

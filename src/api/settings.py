@@ -11,12 +11,14 @@ from api import (
     api, log_request, json_response, error_response,
     get_database, _enrich_models_with_pricing, limiter,
 )
-from config import WHISPER_BACKEND_LOCAL, WHISPER_BACKEND_API, OPENROUTER_BASE_URL
+from config import (
+    WHISPER_BACKEND_LOCAL, WHISPER_BACKEND_API, OPENROUTER_BASE_URL,
+    PROVIDER_ANTHROPIC, PROVIDER_OPENROUTER, PROVIDER_OPENAI_COMPATIBLE, PROVIDER_OLLAMA,
+)
 from pricing_fetcher import force_refresh_pricing
 from llm_client import (
     get_effective_provider, get_effective_base_url, get_api_key, get_effective_openrouter_api_key,
     get_llm_client, create_client_for_provider,
-    PROVIDER_ANTHROPIC, PROVIDER_OPENROUTER, PROVIDER_OPENAI_COMPATIBLE, PROVIDER_OLLAMA,
 )
 from utils.url import validate_url, validate_base_url, SSRFError
 from webhook_service import render_template_preview, fire_test_event, load_webhooks, VALID_EVENTS
@@ -42,7 +44,8 @@ def get_settings():
     """Get all settings."""
     db = get_database()
     from database import DEFAULT_SYSTEM_PROMPT, DEFAULT_VERIFICATION_PROMPT
-    from ad_detector import AdDetector, DEFAULT_MODEL
+    from ad_detector import AdDetector
+    from config import DEFAULT_AD_DETECTION_MODEL as DEFAULT_MODEL
     from chapters_generator import CHAPTERS_MODEL
     settings = db.get_all_settings()
 
@@ -203,7 +206,6 @@ def update_ad_detection_settings():
         valid_llm_providers = (
             PROVIDER_ANTHROPIC, PROVIDER_OPENROUTER,
             PROVIDER_OPENAI_COMPATIBLE, PROVIDER_OLLAMA,
-            'openai', 'wrapper',  # legacy aliases in PROVIDERS_NON_ANTHROPIC
         )
         if data['llmProvider'] not in valid_llm_providers:
             return json_response(

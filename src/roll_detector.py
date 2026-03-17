@@ -12,6 +12,8 @@ import re
 import logging
 from typing import List, Dict, Optional
 
+from utils.text import get_transcript_text_for_range
+
 logger = logging.getLogger(__name__)
 
 # Sign-off patterns (search backwards from end)
@@ -88,13 +90,6 @@ def _count_ad_patterns(text: str) -> int:
     return count
 
 
-def _segments_to_text(segments: List[Dict], start: float, end: float) -> str:
-    """Extract transcript text from segments within a time range."""
-    parts = []
-    for seg in segments:
-        if seg['end'] > start and seg['start'] < end:
-            parts.append(seg.get('text', ''))
-    return ' '.join(parts)
 
 
 def detect_preroll(
@@ -146,7 +141,7 @@ def detect_preroll(
         return None
 
     # Get text before show start and count ad patterns
-    preroll_text = _segments_to_text(segments, episode_start, show_start_time)
+    preroll_text = get_transcript_text_for_range(segments, episode_start, show_start_time)
     match_count = _count_ad_patterns(preroll_text)
 
     threshold = 1 if skip_patterns else MIN_AD_PATTERN_MATCHES
@@ -215,7 +210,7 @@ def detect_postroll(
         return None
 
     # Get text after sign-off and count ad patterns
-    postroll_text = _segments_to_text(segments, signoff_time, episode_end)
+    postroll_text = get_transcript_text_for_range(segments, signoff_time, episode_end)
     match_count = _count_ad_patterns(postroll_text)
 
     if match_count < MIN_AD_PATTERN_MATCHES:

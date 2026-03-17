@@ -1236,7 +1236,7 @@ class SchemaMixin:
         )
 
         # Verification pass model (defaults to same as first pass)
-        from ad_detector import DEFAULT_MODEL
+        from config import DEFAULT_AD_DETECTION_MODEL as DEFAULT_MODEL
         provider = os.environ.get('LLM_PROVIDER', 'anthropic').lower()
         env_model = os.environ.get('OPENAI_MODEL') if provider != 'anthropic' else None
         conn.execute(

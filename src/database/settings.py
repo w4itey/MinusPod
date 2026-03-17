@@ -62,9 +62,10 @@ class SettingsMixin:
         """Reset a setting to its default value."""
         # Import here to avoid circular import
         from database import DEFAULT_SYSTEM_PROMPT, DEFAULT_VERIFICATION_PROMPT
-        from ad_detector import DEFAULT_MODEL
+        from config import DEFAULT_AD_DETECTION_MODEL as DEFAULT_MODEL
         from chapters_generator import CHAPTERS_MODEL
-        from llm_client import get_effective_provider, PROVIDER_ANTHROPIC
+        from config import PROVIDER_ANTHROPIC
+        from llm_client import get_effective_provider
 
         # Provider-aware defaults for model settings
         provider = get_effective_provider()

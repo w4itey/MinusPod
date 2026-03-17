@@ -12,6 +12,7 @@ import requests.exceptions
 from cancel import ProcessingCancelled, _check_cancel, _cancel_events, _cancel_events_lock
 from config import MIN_CUT_CONFIDENCE, MAX_EPISODE_RETRIES
 from llm_client import is_retryable_error, is_llm_api_error, start_episode_token_tracking, get_episode_token_totals
+from utils.text import parse_transcript_segments
 from utils.time import parse_timestamp
 from webhook_service import fire_event, EVENT_EPISODE_PROCESSED, EVENT_EPISODE_FAILED
 
@@ -211,20 +212,7 @@ def _download_and_transcribe(slug, episode_id, episode_url, podcast_name):
 
     if transcript_text:
         audio_logger.info(f"[{slug}:{episode_id}] Found existing transcript in database")
-        segments = []
-        for line in transcript_text.split('\n'):
-            if line.strip() and line.startswith('['):
-                try:
-                    time_part, text_part = line.split('] ', 1)
-                    time_range = time_part.strip('[')
-                    start_str, end_str = time_range.split(' --> ')
-                    segments.append({
-                        'start': parse_timestamp(start_str),
-                        'end': parse_timestamp(end_str),
-                        'text': text_part
-                    })
-                except (ValueError, TypeError):
-                    continue
+        segments = parse_transcript_segments(transcript_text)
 
         if segments:
             duration_min = segments[-1]['end'] / 60
@@ -426,7 +414,7 @@ def _refine_and_validate(slug, episode_id, all_ads, segments, audio_path,
     # Learn patterns from cut ads
     cut_ads = [a for a in all_ads_with_validation if a.get('was_cut')]
     if cut_ads and slug:
-        patterns_learned = ad_detector._learn_from_detections(
+        patterns_learned = ad_detector.learn_from_detections(
             cut_ads, segments, slug, episode_id, audio_path=audio_path
         )
         if patterns_learned > 0:
@@ -832,7 +820,7 @@ def process_episode(slug: str, episode_id: str, episode_url: str,
             if not processed_path:
                 raise Exception("Failed to process audio with FFMPEG")
 
-            original_duration = local_audio_processor.get_audio_duration(audio_path)
+            original_duration = episode_duration
             _check_cancel(cancel_event, slug, episode_id)
 
             # Stage 6: Verification pass

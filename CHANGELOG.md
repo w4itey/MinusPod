@@ -6,6 +6,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.83] - 2026-03-17
+
+### Changed
+- **Codebase simplification pass**: Consolidated duplicate code, extracted shared utilities, and improved efficiency across backend Python source.
+- **Extracted shared utilities**: `parse_iso_datetime()` in `utils/time.py`, `parse_transcript_segments()` and `get_transcript_text_for_range()` in `utils/text.py`, `get_with_retry()` in `utils/http.py`, `calculate_backoff()` in `utils/retry.py` -- replaces inline duplicates across 10+ files.
+- **Provider constants moved to config.py**: `PROVIDER_ANTHROPIC`, `PROVIDER_OPENROUTER`, `PROVIDER_OLLAMA`, `PROVIDERS_NON_ANTHROPIC` now defined in `config.py` instead of `llm_client.py`.
+- **Webhook service refactored**: Replaced `urllib.request`/`_dispatch_webhook()` with `post_with_retry()`, replaced inline datetime formatting with `utc_now_iso()`, added `WebhookPayload` dataclass. Webhook retry now only retries transient errors (429/5xx) instead of all HTTP errors.
+- **Stats query consolidated**: Replaced 7 separate `SELECT COUNT/AVG/SUM` queries in `get_processing_history_stats()` with a single `CASE WHEN` conditional aggregation query.
+- **Fingerprint N+1 query fixed**: `_load_fingerprints_from_db()` now uses a single JOIN query instead of per-row `get_ad_pattern_by_id()` calls.
+- **LLM client improvements**: Extracted `_log_messages()` to base class, replaced `httpx` with `requests` in Ollama fallback, added 5-minute TTL model list cache.
+- **Ad detector cleanup**: Removed `_is_retryable_error()` wrapper (calls `is_retryable_error()` directly), removed `RETRY_CONFIG` dict (uses shared `calculate_backoff()`), removed `DEFAULT_MODEL` re-export (consumers import `DEFAULT_AD_DETECTION_MODEL` from config), renamed `_learn_from_detections` to `learn_from_detections`.
+- **Transcriber cleanup**: Removed `format_timestamp()` wrapper (uses `format_vtt_timestamp()` directly), optimized `_should_reload()` to return model name for reuse in `get_instance()`.
+- **Processing pipeline**: Replaced inline transcript parsing with `parse_transcript_segments()`, eliminated duplicate `get_audio_duration()` call.
+- **Pricing fetcher**: Added retry via `get_with_retry()` to `fetch_openrouter_pricing()` and `fetch_pricepertoken_pricing()`, replaced inline ISO datetime parsing with `parse_iso_datetime()`.
+
+### Removed
+- Legacy OpenRouter Whisper migration code in `transcriber.py` (`_LEGACY_BACKEND_OPENROUTER`, migration fallback blocks) -- migration was completed in v1.0.68.
+- `_dispatch_webhook()` in webhook_service.py (replaced by `post_with_retry()` from utils).
+- `_segments_to_text()` in roll_detector.py (replaced by `get_transcript_text_for_range()` from utils).
+- `get_transcript_text_for_range()` in ad_detector.py (moved to utils/text.py).
+- `httpx` dependency usage in llm_client.py (replaced with `requests`).
+- Legacy `openai` and `wrapper` provider aliases from `PROVIDERS_NON_ANTHROPIC` -- standardized on `openai-compatible` and `ollama` only.
+
 ## [1.0.82] - 2026-03-17
 
 ### Fixed

@@ -13,24 +13,16 @@ services:
       # - ./assets:/app/assets:ro
     environment:
       # =================================================================
-      # LLM Provider Configuration
+      # LLM Provider Configuration (set in .env file)
       # =================================================================
-      # Option 1: Direct Anthropic API (default, uses API credits)
-      # Set LLM_PROVIDER=anthropic and configure ANTHROPIC_API_KEY
+      # LLM_PROVIDER: anthropic (default), openrouter, openai-compatible, ollama
+      # See .env.example for full configuration options per provider
       - LLM_PROVIDER=${LLM_PROVIDER:-anthropic}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-
-      # Option 2: OpenRouter (access 200+ models via one API key)
-      # Set LLM_PROVIDER=openrouter and configure:
-      # - OPENROUTER_API_KEY=sk-or-v1-...
-      # - OPENAI_MODEL=anthropic/claude-sonnet-4-5  (or any OpenRouter model ID)
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-
-      # Option 3: OpenAI-compatible API (Claude Code wrapper, Ollama, etc.)
-      # Set LLM_PROVIDER=openai-compatible and configure:
-      # - OPENAI_BASE_URL=http://claude-wrapper:8000/v1
-      # - OPENAI_API_KEY=${OPENAI_API_KEY:-not-needed}
-      # - OPENAI_MODEL=claude-sonnet-4-5-20250929
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL}
 
       # =================================================================
       # Whisper Configuration

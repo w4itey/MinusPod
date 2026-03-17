@@ -11,6 +11,7 @@ import requests.exceptions
 from flask import Response, send_file, abort, send_from_directory, request
 
 from config import APP_USER_AGENT, JIT_RETRY_COOLDOWN_SECONDS, MAX_EPISODE_RETRIES
+from utils.time import parse_iso_datetime
 
 feed_logger = logging.getLogger('podcast.feed')
 refresh_logger = logging.getLogger('podcast.refresh')
@@ -217,7 +218,7 @@ def register_routes(app):
             feed_logger.info(f"[{slug}] No RSS cache, refreshing")
         elif last_checked:
             try:
-                last_time = datetime.fromisoformat(last_checked.replace('Z', '+00:00'))
+                last_time = parse_iso_datetime(last_checked)
                 age_minutes = (datetime.now(timezone.utc) - last_time).total_seconds() / 60
                 if age_minutes > 15:
                     should_refresh = True
@@ -300,7 +301,7 @@ def register_routes(app):
             # Cooldown check - don't retry if failed recently (gives CDN time to propagate)
             updated_at = episode.get('updated_at')
             if updated_at and retry_count > 0:
-                last_update = datetime.fromisoformat(updated_at.replace('Z', '+00:00'))
+                last_update = parse_iso_datetime(updated_at)
                 now = datetime.now(timezone.utc)
                 cooldown_seconds = JIT_RETRY_COOLDOWN_SECONDS * (2 ** (retry_count - 1))
                 elapsed = (now - last_update).total_seconds()

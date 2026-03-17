@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from utils.time import utc_now_iso
+from utils.time import utc_now_iso, parse_iso_datetime
 
 from flask import request
 
@@ -96,7 +96,7 @@ def get_pattern_stats():
         last_matched = p.get('last_matched_at')
         if last_matched:
             try:
-                last_date = datetime.fromisoformat(last_matched.replace('Z', '+00:00'))
+                last_date = parse_iso_datetime(last_matched)
                 if last_date < stale_threshold:
                     stats['stale_count'] += 1
                     stats['stale_patterns'].append({

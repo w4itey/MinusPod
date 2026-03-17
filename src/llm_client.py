@@ -36,6 +36,11 @@ from config import (
     OPENROUTER_BASE_URL,
     OPENROUTER_HTTP_REFERER,
     OPENROUTER_APP_TITLE,
+    PROVIDER_ANTHROPIC,
+    PROVIDER_OPENROUTER,
+    PROVIDER_OPENAI_COMPATIBLE,
+    PROVIDER_OLLAMA,
+    PROVIDERS_NON_ANTHROPIC,
 )
 
 logger = logging.getLogger(__name__)
@@ -102,15 +107,11 @@ _provider_cache_lock = threading.Lock()
 _PROVIDER_CACHE_TTL = 5.0  # seconds
 
 # =========================================================================
-# Provider name constants
+# Model list cache (avoids hitting the API on every /settings page load)
 # =========================================================================
-
-PROVIDER_ANTHROPIC = 'anthropic'
-PROVIDER_OPENROUTER = 'openrouter'
-PROVIDER_OPENAI_COMPATIBLE = 'openai-compatible'
-PROVIDER_OLLAMA = 'ollama'
-PROVIDERS_NON_ANTHROPIC = ('openai-compatible', 'openai', 'wrapper', 'ollama')
-
+_model_list_cache: Dict[str, Any] = {}
+_model_list_cache_lock = threading.Lock()
+_MODEL_LIST_CACHE_TTL = 300.0  # 5 minutes
 
 def _get_cached_setting(key: str) -> Optional[str]:
     """Read a setting from DB with a short TTL cache to avoid per-request queries."""
@@ -133,6 +134,27 @@ def _clear_provider_cache():
     """Flush the provider settings cache (called on force_new)."""
     with _provider_cache_lock:
         _provider_cache.clear()
+
+
+def _get_cached_model_list(provider_key: str) -> Optional[List['LLMModel']]:
+    """Return cached model list if still fresh, else None."""
+    with _model_list_cache_lock:
+        entry = _model_list_cache.get(provider_key)
+        if entry and (time.monotonic() - entry['ts']) < _MODEL_LIST_CACHE_TTL:
+            return entry['models']
+    return None
+
+
+def _set_cached_model_list(provider_key: str, models: List['LLMModel']):
+    """Store a model list in the cache."""
+    with _model_list_cache_lock:
+        _model_list_cache[provider_key] = {'models': models, 'ts': time.monotonic()}
+
+
+def _clear_model_list_cache():
+    """Flush the model list cache (called on provider change or manual refresh)."""
+    with _model_list_cache_lock:
+        _model_list_cache.clear()
 
 
 def get_effective_provider() -> str:
@@ -191,6 +213,22 @@ class LLMClient(ABC):
             except Exception as e:
                 logger.warning(f"Token usage recording failed: {e}")
 
+    def _log_messages(self, provider_label: str, system: str, messages: List[Dict],
+                       model: str, temperature: float, max_tokens: int):
+        """Log request details for debugging. Shared by all client implementations."""
+        _log_content(f"{provider_label} system prompt", system)
+        for i, msg in enumerate(messages):
+            content_val = msg.get('content', '')
+            if isinstance(content_val, list):
+                content_str = ' '.join(
+                    part.get('text', '') for part in content_val
+                    if isinstance(part, dict) and part.get('type') == 'text'
+                ) or str(content_val)
+            else:
+                content_str = str(content_val)
+            _log_content(f"{provider_label} message[{i}] role={msg.get('role')}", content_str)
+        io_logger.debug(f"{provider_label} request: model={model} temperature={temperature} max_tokens={max_tokens}")
+
     @abstractmethod
     def messages_create(
         self,
@@ -220,8 +258,11 @@ class LLMClient(ABC):
         pass
 
     @abstractmethod
-    def list_models(self) -> List[LLMModel]:
+    def list_models(self, bypass_cache: bool = False) -> List[LLMModel]:
         """List available models.
+
+        Args:
+            bypass_cache: If True, skip the TTL cache and fetch fresh data.
 
         Returns:
             List of LLMModel objects
@@ -280,19 +321,7 @@ class AnthropicClient(LLMClient):
                 effective_system = system + json_instruction
                 logger.debug("Added JSON format instructions to system prompt")
 
-        # Log request details
-        _log_content("Anthropic system prompt", effective_system)
-        for i, msg in enumerate(messages):
-            content_val = msg.get('content', '')
-            if isinstance(content_val, list):
-                content_str = ' '.join(
-                    part.get('text', '') for part in content_val
-                    if isinstance(part, dict) and part.get('type') == 'text'
-                ) or str(content_val)
-            else:
-                content_str = str(content_val)
-            _log_content(f"Anthropic message[{i}] role={msg.get('role')}", content_str)
-        io_logger.debug(f"Anthropic request: model={model} temperature={temperature} max_tokens={max_tokens}")
+        self._log_messages("Anthropic", effective_system, messages, model, temperature, max_tokens)
 
         response = self._client.messages.create(
             model=model,
@@ -328,7 +357,11 @@ class AnthropicClient(LLMClient):
         self._notify_usage(llm_response)
         return llm_response
 
-    def list_models(self) -> List[LLMModel]:
+    def list_models(self, bypass_cache: bool = False) -> List[LLMModel]:
+        cached = None if bypass_cache else _get_cached_model_list(PROVIDER_ANTHROPIC)
+        if cached is not None:
+            return cached
+
         self._ensure_client()
 
         try:
@@ -341,6 +374,7 @@ class AnthropicClient(LLMClient):
                         name=model.display_name if hasattr(model, 'display_name') else model.id,
                         created=str(model.created) if hasattr(model, 'created') else None
                     ))
+            _set_cached_model_list(PROVIDER_ANTHROPIC, models)
             return models
         except Exception as e:
             logger.error(f"Could not fetch models from Anthropic API: {e}")
@@ -420,19 +454,7 @@ class OpenAICompatibleClient(LLMClient):
         # OpenAI format uses system message in messages array
         all_messages = [{"role": "system", "content": system}] + messages
 
-        # Log request details
-        _log_content("OpenAI system prompt", system)
-        for i, msg in enumerate(messages):
-            content_val = msg.get('content', '')
-            if isinstance(content_val, list):
-                content_str = ' '.join(
-                    part.get('text', '') for part in content_val
-                    if isinstance(part, dict) and part.get('type') == 'text'
-                ) or str(content_val)
-            else:
-                content_str = str(content_val)
-            _log_content(f"OpenAI message[{i}] role={msg.get('role')}", content_str)
-        io_logger.debug(f"OpenAI request: model={model} temperature={temperature} max_tokens={max_tokens}")
+        self._log_messages("OpenAI", system, messages, model, temperature, max_tokens)
 
         # Build request kwargs with adaptive token parameter
         # Newer OpenAI models (gpt-5-mini, etc.) require max_completion_tokens
@@ -489,13 +511,18 @@ class OpenAICompatibleClient(LLMClient):
         self._notify_usage(llm_response)
         return llm_response
 
-    def list_models(self) -> List[LLMModel]:
+    def list_models(self, bypass_cache: bool = False) -> List[LLMModel]:
         """List models from the OpenAI-compatible API.
 
         Returns all models reported by the endpoint without filtering.
         This ensures Ollama models (qwen3, mistral, phi4-mini, etc.) are
         visible alongside Claude/GPT models from other providers.
         """
+        cache_key = f"openai:{self.base_url}"
+        cached = None if bypass_cache else _get_cached_model_list(cache_key)
+        if cached is not None:
+            return cached
+
         self._ensure_client()
 
         try:
@@ -508,11 +535,13 @@ class OpenAICompatibleClient(LLMClient):
                     name=model_id,
                     created=str(model.created) if hasattr(model, 'created') else None
                 ))
+            _set_cached_model_list(cache_key, models)
             return models
         except Exception as e:
             logger.error(f"Could not fetch models from OpenAI-compatible API: {e}")
             native = self._try_ollama_native_list()
             if native:
+                _set_cached_model_list(cache_key, native)
                 return native
             return []
 
@@ -561,8 +590,8 @@ class OpenAICompatibleClient(LLMClient):
 
         url = f"{root}/api/tags"
         try:
-            import httpx
-            resp = httpx.get(url, timeout=10.0)
+            import requests
+            resp = requests.get(url, timeout=10.0)
             resp.raise_for_status()
             data = resp.json()
             models = []
@@ -707,6 +736,7 @@ def get_llm_client(force_new: bool = False) -> LLMClient:
 
     if force_new:
         _clear_provider_cache()
+        _clear_model_list_cache()
 
     with _client_lock:
         if _cached_client is not None and not force_new:

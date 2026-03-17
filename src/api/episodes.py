@@ -11,6 +11,7 @@ from api import (
     api, limiter, log_request, json_response, error_response,
     get_database, get_storage,
 )
+from utils.text import parse_transcript_segments
 from utils.time import parse_timestamp, utc_now_iso
 
 logger = logging.getLogger('podcast.api')
@@ -609,23 +610,7 @@ def retry_ad_detection(slug, episode_id):
         from llm_client import start_episode_token_tracking, get_episode_token_totals
 
         # Parse transcript back into segments
-        segments = []
-        for line in transcript.split('\n'):
-            if line.strip() and line.startswith('['):
-                try:
-                    # Parse format: [HH:MM:SS.mmm --> HH:MM:SS.mmm] text
-                    time_part, text_part = line.split('] ', 1)
-                    time_range = time_part.strip('[')
-                    start_str, end_str = time_range.split(' --> ')
-
-                    # Uses utils.time.parse_timestamp imported at module level
-                    segments.append({
-                        'start': parse_timestamp(start_str),
-                        'end': parse_timestamp(end_str),
-                        'text': text_part
-                    })
-                except Exception:
-                    continue
+        segments = parse_transcript_segments(transcript)
 
         if not segments:
             return error_response('Could not parse transcript into segments', 400)

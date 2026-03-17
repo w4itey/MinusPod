@@ -9,6 +9,7 @@ from typing import Dict, List, Optional
 import requests
 
 from config import APP_USER_AGENT
+from utils.time import parse_iso_datetime
 from utils.url import validate_url, SSRFError
 
 logger = logging.getLogger(__name__)
@@ -314,7 +315,7 @@ class RSSParser:
     def _format_rfc2822(self, iso_date: str) -> str:
         """Convert ISO 8601 date string to RFC 2822 format for RSS pubDate."""
         try:
-            dt = datetime.fromisoformat(iso_date.replace('Z', '+00:00'))
+            dt = parse_iso_datetime(iso_date)
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=timezone.utc)
             return format_datetime(dt)

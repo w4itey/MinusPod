@@ -19,6 +19,8 @@ from config import (
     normalize_model_key,
     PRICING_CACHE_TTL,
 )
+from utils.http import get_with_retry
+from utils.time import parse_iso_datetime
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +35,13 @@ def fetch_openrouter_pricing() -> List[Dict]:
       [{match_key, raw_model_id, display_name,
         input_cost_per_mtok, output_cost_per_mtok}, ...]
     """
-    resp = requests.get('https://openrouter.ai/api/v1/models', timeout=15)
-    resp.raise_for_status()
+    resp = get_with_retry(
+        'https://openrouter.ai/api/v1/models',
+        timeout=15,
+        log_prefix="OpenRouter pricing",
+    )
+    if resp is None:
+        raise ConnectionError("Failed to fetch OpenRouter pricing after retries")
 
     results = []
     for model in resp.json().get('data', []):
@@ -90,8 +97,9 @@ def fetch_pricepertoken_pricing(url: str) -> List[Dict]:
       [{match_key, raw_model_id, display_name,
         input_cost_per_mtok, output_cost_per_mtok}, ...]
     """
-    resp = requests.get(url, timeout=15)
-    resp.raise_for_status()
+    resp = get_with_retry(url, timeout=15, log_prefix="pricepertoken")
+    if resp is None:
+        raise ConnectionError(f"Failed to fetch pricing from {url} after retries")
 
     soup = BeautifulSoup(resp.text, 'html.parser')
 
@@ -221,7 +229,7 @@ def refresh_pricing_if_stale(force: bool = False):
             db = Database()
             last_updated = db.get_pricing_last_updated()
             if last_updated:
-                updated_dt = datetime.fromisoformat(last_updated.replace('Z', '+00:00'))
+                updated_dt = parse_iso_datetime(last_updated)
                 age_seconds = (datetime.now(timezone.utc) - updated_dt).total_seconds()
                 if age_seconds < PRICING_CACHE_TTL:
                     with _fetch_lock:

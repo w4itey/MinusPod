@@ -587,18 +587,14 @@ class AudioFingerprinter:
         return matches
 
     def _load_fingerprints_from_db(self) -> List[Tuple[int, str, float, str]]:
-        """Load known fingerprints from database."""
+        """Load known fingerprints from database with sponsors (single JOIN query)."""
         if not self.db:
             return []
 
         try:
-            fingerprints = self.db.get_all_audio_fingerprints()
+            fingerprints = self.db.get_all_fingerprints_with_sponsors()
             result = []
             for fp in fingerprints:
-                # Get pattern to find sponsor
-                pattern = self.db.get_ad_pattern_by_id(fp['pattern_id'])
-                sponsor = pattern.get('sponsor') if pattern else None
-
                 # Fingerprint may be stored as bytes or string
                 fp_data = fp.get('fingerprint', b'')
                 if isinstance(fp_data, bytes):
@@ -610,7 +606,7 @@ class AudioFingerprinter:
                     fp['pattern_id'],
                     fp_str,
                     fp['duration'],
-                    sponsor
+                    fp.get('sponsor')
                 ))
             return result
         except Exception as e:

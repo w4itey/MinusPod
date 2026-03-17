@@ -453,14 +453,14 @@ class TestCallLlmForWindowRetry:
         # Simulate auth error (non-retryable)
         auth_error = Exception("401 Unauthorized: invalid API key")
         detector._llm_client.messages_create.side_effect = auth_error
-        detector._is_retryable_error = MagicMock(return_value=False)
-        detector._calculate_backoff = MagicMock(return_value=0.0)
 
-        response, error = detector._call_llm_for_window(
-            model="test-model", system_prompt="test", prompt="test",
-            max_retries=1, llm_timeout=10, slug="test", episode_id="ep1",
-            window_label="Window 1"
-        )
+        with patch('ad_detector.is_retryable_error', return_value=False), \
+             patch('ad_detector.calculate_backoff', return_value=0.0):
+            response, error = detector._call_llm_for_window(
+                model="test-model", system_prompt="test", prompt="test",
+                max_retries=1, llm_timeout=10, slug="test", episode_id="ep1",
+                window_label="Window 1"
+            )
 
         assert response is None
         assert error is auth_error
@@ -481,10 +481,10 @@ class TestCallLlmForWindowRetry:
         detector._llm_client.messages_create.side_effect = [
             transient_error, transient_error, success_response
         ]
-        detector._is_retryable_error = MagicMock(return_value=True)
-        detector._calculate_backoff = MagicMock(return_value=0.0)
 
-        with patch('ad_detector.time.sleep'):
+        with patch('ad_detector.is_retryable_error', return_value=True), \
+             patch('ad_detector.calculate_backoff', return_value=0.0), \
+             patch('ad_detector.time.sleep'):
             response, error = detector._call_llm_for_window(
                 model="test-model", system_prompt="test", prompt="test",
                 max_retries=1, llm_timeout=10, slug="test", episode_id="ep1",

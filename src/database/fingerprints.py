@@ -23,6 +23,16 @@ class FingerprintMixin:
         cursor = conn.execute("SELECT * FROM audio_fingerprints")
         return [dict(row) for row in cursor.fetchall()]
 
+    def get_all_fingerprints_with_sponsors(self) -> List[Dict]:
+        """Get all audio fingerprints with sponsor names from ad_patterns (single JOIN)."""
+        conn = self.get_connection()
+        cursor = conn.execute(
+            """SELECT af.pattern_id, af.fingerprint, af.duration, ap.sponsor
+               FROM audio_fingerprints af
+               LEFT JOIN ad_patterns ap ON af.pattern_id = ap.id"""
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
     def create_audio_fingerprint(self, pattern_id: int, fingerprint: bytes,
                                   duration: float) -> int:
         """Create an audio fingerprint. Returns fingerprint ID."""
