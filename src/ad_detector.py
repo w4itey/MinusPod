@@ -11,7 +11,8 @@ from llm_client import (
     get_llm_client, get_api_key, LLMClient,
     is_retryable_error, is_rate_limit_error,
     get_llm_timeout, get_llm_max_retries,
-    get_effective_provider, model_matches_provider
+    get_effective_provider, model_matches_provider,
+    resolve_anthropic_alias,
 )
 from utils.time import parse_timestamp, first_not_none
 
@@ -1146,21 +1147,29 @@ class AdDetector:
         return models_list
 
     def get_model(self) -> str:
-        """Get configured model from database or default."""
+        """Get configured model from database or default.
+
+        If the stored model is an Anthropic alias (no date suffix), resolves
+        it to the corresponding dated inference ID via the live model list.
+        """
         try:
             model = self.db.get_setting('claude_model')
             if model:
-                return model
+                return resolve_anthropic_alias(model)
         except Exception as e:
             logger.warning(f"Could not load model from DB: {e}")
         return DEFAULT_MODEL
 
     def get_verification_model(self) -> str:
-        """Get verification pass model from database or fall back to first pass model."""
+        """Get verification pass model from database or fall back to first pass model.
+
+        If the stored model is an Anthropic alias (no date suffix), resolves
+        it to the corresponding dated inference ID via the live model list.
+        """
         try:
             model = self.db.get_setting('verification_model')
             if model:
-                return model
+                return resolve_anthropic_alias(model)
         except Exception:
             pass
         return self.get_model()

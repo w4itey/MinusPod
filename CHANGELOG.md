@@ -6,6 +6,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.78] - 2026-03-17
+
+### Fixed
+- **Use canonical model IDs, filter aliases dynamically**: Anthropic's `models.list()` returns both alias IDs (e.g. `claude-sonnet-4-6`) and dated inference IDs (e.g. `claude-sonnet-4-5-20250929`). Aliases are not reliably accepted by the messages API, causing intermittent 400 errors. `AnthropicClient.list_models()` now dynamically filters out aliases when a dated counterpart exists, so the UI dropdown only shows dated IDs. A safety net resolves any alias stored in DB to its dated counterpart at runtime in `get_model()`, `get_verification_model()`, and `get_chapters_model()`.
+- **Token tracking uses requested model ID**: Both `AnthropicClient` and `OpenAICompatibleClient` now record the requested model ID in `LLMResponse.model` instead of `response.model` from the provider, preventing DB fragmentation across model name variants.
+- **Remove alias-only pricing entries**: Removed `claude-opus-4-6` and `claude-sonnet-4-6` from `DEFAULT_MODEL_PRICING` to prevent silent conflicts with their dated counterparts during `seed_default_pricing()`.
+
 ## [1.0.77] - 2026-03-17
 
 ### Fixed

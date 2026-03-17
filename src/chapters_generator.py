@@ -11,7 +11,8 @@ from utils.text import extract_text_from_segments
 from llm_client import (
     get_llm_client, get_api_key, LLMClient,
     APIError, RateLimitError, is_rate_limit_error,
-    get_llm_timeout
+    get_llm_timeout, get_effective_provider, resolve_anthropic_alias,
+    PROVIDER_ANTHROPIC,
 )
 
 logger = logging.getLogger(__name__)
@@ -25,18 +26,21 @@ CHAPTERS_MODEL = _DEFAULT_CHAPTERS_MODEL
 
 
 def get_chapters_model() -> str:
-    """Get configured chapters model from database or fall back to default."""
+    """Get configured chapters model from database or fall back to default.
+
+    If the stored model is an Anthropic alias (no date suffix), resolves
+    it to the corresponding dated inference ID via the live model list.
+    """
     try:
         from database import Database
         db = Database()
 
         model = db.get_setting('chapters_model')
         if model:
-            return model
+            return resolve_anthropic_alias(model)
 
         # Provider-aware fallback: use the primary detection model for non-Anthropic providers
         # (Ollama doesn't have Anthropic model names like claude-haiku-4-5-20251001)
-        from llm_client import get_effective_provider, PROVIDER_ANTHROPIC
         provider = get_effective_provider()
         if provider != PROVIDER_ANTHROPIC:
             primary_model = db.get_setting('claude_model')

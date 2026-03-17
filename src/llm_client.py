@@ -28,6 +28,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import List, Dict, Optional, Any
 
+import re
+
 from config import (
     LLM_TIMEOUT_DEFAULT,
     LLM_TIMEOUT_LOCAL,
@@ -141,6 +143,94 @@ def get_effective_provider() -> str:
     if db_val:
         return db_val.lower()
     return os.environ.get('LLM_PROVIDER', PROVIDER_ANTHROPIC).lower()
+
+
+_DATE_SUFFIX_RE = re.compile(r'-20[2-3]\d\d{4}$')
+
+
+def _has_date_suffix(model_id: str) -> bool:
+    """Return True if model_id ends with a YYYYMMDD date suffix."""
+    return bool(_DATE_SUFFIX_RE.search(model_id))
+
+
+def _claude_family(model_id: str) -> str:
+    """Extract the Claude model family prefix (e.g. 'claude-sonnet', 'claude-opus').
+
+    Strips version numbers and date suffixes to get the base family name.
+    """
+    # Remove date suffix first
+    name = _DATE_SUFFIX_RE.sub('', model_id)
+    # Remove trailing version digits: e.g. 'claude-sonnet-4-5' -> 'claude-sonnet'
+    return re.sub(r'(-\d+)+$', '', name)
+
+
+def _filter_anthropic_aliases(models: List['LLMModel']) -> List['LLMModel']:
+    """Remove Anthropic alias models when a dated version in the same family exists.
+
+    An alias is a model that:
+    - starts with 'claude-'
+    - does NOT have a date suffix (-YYYYMMDD)
+    - has a counterpart in the list from the same family (e.g. claude-sonnet)
+      that DOES have a date suffix
+    """
+    dated_families = {
+        _claude_family(m.id)
+        for m in models
+        if m.id.startswith('claude-') and _has_date_suffix(m.id)
+    }
+    return [
+        m for m in models
+        if not (
+            m.id.startswith('claude-')
+            and not _has_date_suffix(m.id)
+            and _claude_family(m.id) in dated_families
+        )
+    ]
+
+
+_alias_cache: Dict[str, Any] = {}
+_alias_cache_lock = threading.Lock()
+_ALIAS_CACHE_TTL = 300.0  # 5 minutes -- model lists change rarely
+
+
+def resolve_anthropic_alias(model_id: str) -> str:
+    """If model_id is an Anthropic alias (no date suffix), resolve it to the dated ID.
+
+    Results are cached with a TTL to avoid repeated API calls during episode
+    processing. Returns the original model_id unchanged for non-Claude models,
+    dated IDs, or non-Anthropic providers.
+    """
+    if not model_id.startswith('claude-') or _has_date_suffix(model_id):
+        return model_id
+
+    # Check TTL cache
+    with _alias_cache_lock:
+        entry = _alias_cache.get(model_id)
+        if entry and (time.monotonic() - entry['ts']) < _ALIAS_CACHE_TTL:
+            return entry['val']
+
+    try:
+        client = get_llm_client()
+        if not isinstance(client, AnthropicClient):
+            return model_id
+        # list_models() already filters aliases, so all results are dated
+        all_models = client.list_models()
+        target_family = _claude_family(model_id)
+        # Find dated models in the same family, pick the one with the latest date
+        candidates = [
+            m for m in all_models
+            if _has_date_suffix(m.id) and _claude_family(m.id) == target_family
+        ]
+        if candidates:
+            best = max(candidates, key=lambda m: m.id)
+            logger.info(f"Resolved Anthropic alias '{model_id}' -> '{best.id}'")
+            with _alias_cache_lock:
+                _alias_cache[model_id] = {'val': best.id, 'ts': time.monotonic()}
+            return best.id
+    except Exception as e:
+        logger.warning(f"Could not resolve Anthropic alias '{model_id}': {e}")
+
+    return model_id
 
 
 def model_matches_provider(model_id: str, provider: str) -> bool:
@@ -307,7 +397,7 @@ class AnthropicClient(LLMClient):
 
         llm_response = LLMResponse(
             content=content,
-            model=response.model,
+            model=model,
             usage={
                 'input_tokens': response.usage.input_tokens,
                 'output_tokens': response.usage.output_tokens
@@ -341,7 +431,7 @@ class AnthropicClient(LLMClient):
                         name=model.display_name if hasattr(model, 'display_name') else model.id,
                         created=str(model.created) if hasattr(model, 'created') else None
                     ))
-            return models
+            return _filter_anthropic_aliases(models)
         except Exception as e:
             logger.error(f"Could not fetch models from Anthropic API: {e}")
             return []
@@ -468,7 +558,7 @@ class OpenAICompatibleClient(LLMClient):
 
         llm_response = LLMResponse(
             content=content,
-            model=response.model,
+            model=model,
             usage={
                 'input_tokens': response.usage.prompt_tokens,
                 'output_tokens': response.usage.completion_tokens
