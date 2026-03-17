@@ -6,6 +6,78 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.82] - 2026-03-17
+
+### Fixed
+- **Duplicate pricing fetches across gunicorn workers**: Each worker had its own in-memory `_last_fetch` counter, causing independent pricing fetches on every container start. Added DB-level coordination via `MAX(updated_at)` from `model_pricing` table -- if another worker recently wrote pricing within TTL, the second worker syncs its in-memory timer and skips the HTTP fetch.
+- **Pre-roll detection gap in Full reprocess mode**: Full mode (`skip_patterns=True`) bypasses Stages 1 & 2, leaving `detect_preroll()` as the sole safety net for short pre-roll ads. Lowered the ad pattern match threshold from 2 to 1 when `skip_patterns=True` so DAI pre-rolls with a single obvious ad indicator are caught.
+- **Prefix match pricing lookup matched wrong models**: `_calculate_token_cost` prefix fallback could match a shorter stored key to a longer distinct model (e.g., `gpt4o` incorrectly matching `gpt4omini`). Added 80% length coverage requirement so stored keys must cover most of the lookup key.
+- **Per-window LLM retry retried non-retryable errors**: `_call_llm_for_window` per-window retry loop retried unconditionally, including auth and forbidden errors. Now checks `is_retryable_error()` before entering per-window retries.
+- **Raw exception leaked in pricing refresh 502 response**: `POST /system/model-pricing/refresh` returned `str(e)` in the error response, potentially exposing internal paths. Now returns a generic message and logs details server-side.
+- **OpenAPI spec gaps**: Added missing `?source=` on `GET /system/model-pricing`, `?page=` on `GET /history`, and `400` response on `GET /settings/models`.
+- **Normalization variant suffix case sensitivity**: `normalize_model_key` only stripped lowercase OpenRouter suffixes (`:free`); now handles mixed case (`:Free`, `:Extended`).
+- **Pricing upsert dual-constraint tension**: `upsert_fetched_pricing` could hit PK/UNIQUE conflict if scraped data contained duplicate display names. Added pre-loop deduplication by `match_key`.
+- **Fingerprint sliding window list allocation**: `_find_matches_fast` created a new list slice per sliding step (~1200x per episode). Refactored `_calculate_similarity` to accept start/end indices, avoiding the copy.
+- **LLM client race on `_cached_client`**: Added `_client_lock` to synchronize `get_llm_client()` across threads.
+- **Pricing refresh blocks settings save**: `force_refresh_pricing()` in the provider-change settings handler now runs in a background thread instead of blocking the HTTP response.
+
+## [1.0.81] - 2026-03-17
+
+### Fixed
+- **Stale models on provider switch**: Model dropdown now refetches immediately when switching LLM provider (e.g. Anthropic to OpenRouter). The `GET /settings/models` endpoint accepts an optional `?provider=` query param so the frontend can preview models for a provider before saving settings. React Query key includes the selected provider for automatic cache separation.
+- **Missing prices on OpenRouter free models**: `fetch_openrouter_pricing()` no longer skips models where both input and output costs are $0. Free models (`:free` suffix) are now stored with $0 pricing so the UI displays pricing instead of showing nothing.
+
+### Removed
+- **Anthropic model alias filtering and resolution**: The `_filter_anthropic_aliases()` filter in `list_models()` and the `resolve_anthropic_alias()` runtime resolution in `get_model()`, `get_verification_model()`, and `get_chapters_model()` were added in v1.0.78-1.0.79 to work around intermittent 400 errors that turned out to be caused by an API key issue, not by Anthropic rejecting alias model IDs. Model IDs from the API and database are now used as-is without filtering or resolution (reverts to v1.0.74 behavior).
+
+## [1.0.80] - 2026-03-17
+
+### Fixed
+- **Fingerprint scan 1000x slower than expected**: Sliding window fingerprint search spawned 2 subprocesses (ffmpeg + fpcalc) per 2-second step, resulting in ~2378 subprocess calls for a 40-minute episode. Refactored `find_matches()` to pre-compute one full-file fingerprint via a single fpcalc call, then compare by slicing the raw int array in pure Python. Falls back to per-window scanning if full-file fingerprint fails.
+- **History page pagination broken**: Frontend sends `page` param but backend only read `offset`, so every page returned the same results. Backend now accepts `page`, converts to offset, and includes `page` in the response. The `offset` param still works for backwards compatibility.
+- **API errors abort entire episode processing**: A single LLM window failure (400/500) killed ad detection for the whole episode. Added per-window retry (2 extra attempts with 2s/5s backoff) and skip-on-failure logic so partial results are returned. Only aborts if ALL windows fail. Applied to both detection and verification passes.
+
+## [1.0.79] - 2026-03-17
+
+### Fixed
+- **Alias filter incorrectly removes new models (Sonnet 4.6, Opus 4.6)**: `_filter_anthropic_aliases()` used family-based grouping that treated `claude-sonnet-4-6` and `claude-opus-4-6` as aliases for their 4.5 counterparts. Replaced `_claude_family()` with `_strip_date_suffix()` so a non-dated model is only filtered when a dated model with the exact same version prefix exists. Restored 4.6 pricing entries in `DEFAULT_MODEL_PRICING`.
+
+## [1.0.78] - 2026-03-17
+
+### Fixed
+- **Use canonical model IDs, filter aliases dynamically**: Anthropic's `models.list()` returns both alias IDs (e.g. `claude-sonnet-4-6`) and dated inference IDs (e.g. `claude-sonnet-4-5-20250929`). Aliases are not reliably accepted by the messages API, causing intermittent 400 errors. `AnthropicClient.list_models()` now dynamically filters out aliases when a dated counterpart exists, so the UI dropdown only shows dated IDs. A safety net resolves any alias stored in DB to its dated counterpart at runtime in `get_model()`, `get_verification_model()`, and `get_chapters_model()`.
+- **Token tracking uses requested model ID**: Both `AnthropicClient` and `OpenAICompatibleClient` now record the requested model ID in `LLMResponse.model` instead of `response.model` from the provider, preventing DB fragmentation across model name variants.
+- **Remove alias-only pricing entries**: Removed `claude-opus-4-6` and `claude-sonnet-4-6` from `DEFAULT_MODEL_PRICING` to prevent silent conflicts with their dated counterparts during `seed_default_pricing()`.
+
+## [1.0.77] - 2026-03-17
+
+### Fixed
+- **Stale models on provider change**: Switching LLM provider in Settings now clears model dropdown selections immediately, preventing stale models from the previous provider from persisting until save.
+- **OpenRouter variant suffix normalization**: `normalize_model_key` now strips OpenRouter variant suffixes (`:free`, `:extended`, `:beta`, `:nitro`) before normalization, so `z-ai/glm-4.5-air:free` correctly matches pricing for `glm-4.5-air`.
+
+## [1.0.76] - 2026-03-16
+
+### Fixed
+- **Migration failure on existing DB**: Seed INSERT into `model_pricing` no longer references `match_key`, `raw_model_id`, or `source` columns that only exist after the ALTER TABLE migration runs. Existing DBs upgrading from pre-1.0.75 schemas will now migrate cleanly.
+- **Stale pricing after provider change**: Switching LLM provider now calls `force_refresh_pricing()` to immediately fetch pricing for the new provider, instead of just resetting the TTL and waiting up to 15 minutes for the background loop.
+- **Noisy duplicate column log**: Downgraded the "duplicate column name" log in `_add_column_if_missing` from ERROR to WARNING, since this is expected when multiple gunicorn workers race to run the same ALTER TABLE migration.
+
+## [1.0.75] - 2026-03-16
+
+### Added
+- **Multi-provider LLM pricing**: Cost tracking now works for any LLM provider, not just Anthropic. Pricing is fetched live from OpenRouter's API (for OpenRouter users) or scraped from pricepertoken.com (for Anthropic, OpenAI, Groq, Mistral, DeepSeek, xAI, Together, Fireworks, Perplexity, and Google). Pricing refreshes automatically every 24 hours and on provider change. Local/Ollama providers report $0.
+- **Model name normalization**: A `normalize_model_key()` function maps model names across different naming conventions (API IDs, display names, provider-prefixed IDs) to a single lookup key, so pricing matches regardless of source format.
+- **Manual pricing refresh endpoint**: `POST /api/v1/system/model-pricing/refresh` forces an immediate pricing data refresh from the active provider's pricing source.
+- **Pricing source tracking**: Each model pricing entry now records its source (`openrouter_api`, `pricepertoken`, `default`, `legacy`) and the raw model ID from the pricing source.
+- **New dependency**: `beautifulsoup4` for HTML table parsing from pricepertoken.com.
+
+### Changed
+- **Schema migration**: `model_pricing` table gains `match_key`, `raw_model_id`, and `source` columns with a UNIQUE index on `match_key`. `token_usage` table gains `match_key` column. Existing rows are backfilled automatically. No data loss.
+- **Cost calculation**: `_calculate_token_cost()` now uses normalized `match_key` lookups instead of raw `model_id` matching.
+- **Token usage joins**: `get_token_usage_summary()` joins on `match_key` instead of `model_id` for correct pricing display across providers.
+- **Model list enrichment**: `_enrich_models_with_pricing()` uses `match_key` lookups and no longer calls `refresh_model_pricing()` directly (pricing comes from background fetch).
+- **Default pricing demoted to fallback**: `DEFAULT_MODEL_PRICING` is only used when live fetch fails AND the pricing table is empty (air-gapped/offline installs).
+
 ## [1.0.74] - 2026-03-16
 
 ### Added

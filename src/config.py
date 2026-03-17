@@ -3,6 +3,8 @@
 All magic numbers and thresholds should be defined here
 for easy tuning and consistency across the codebase.
 """
+import re
+from urllib.parse import urlparse
 
 # ============================================================
 # Confidence Thresholds (0.0 - 1.0 scale)
@@ -171,6 +173,30 @@ OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
 OPENROUTER_HTTP_REFERER = 'https://github.com/ttlequals0/minuspod'
 OPENROUTER_APP_TITLE = 'MinusPod'
 
+# ============================================================
+# LLM Pricing Configuration
+# ============================================================
+
+# Map base URL domains to pricepertoken.com pricing page paths.
+# Tuple is (url_type, slug) -> constructs: pricepertoken.com/{url_type}/{slug}
+# None means provider has a native pricing API (handled separately).
+PROVIDER_PRICING_SLUGS = {
+    'api.anthropic.com':                  ('pricing-page/provider', 'anthropic'),
+    'api.openai.com':                     ('pricing-page/provider', 'openai'),
+    'generativelanguage.googleapis.com':  ('pricing-page/provider', 'google'),
+    'api.mistral.ai':                     ('pricing-page/provider', 'mistral'),
+    'api.deepseek.com':                   ('pricing-page/provider', 'deepseek'),
+    'api.x.ai':                           ('pricing-page/provider', 'xai'),
+    'api.perplexity.ai':                  ('pricing-page/provider', 'perplexity'),
+    'api.groq.com':                       ('endpoints', 'groq'),
+    'api.together.xyz':                   ('endpoints', 'together'),
+    'api.fireworks.ai':                   ('endpoints', 'fireworks'),
+    'openrouter.ai':                      None,  # Native API
+}
+
+# Pricing cache TTL (seconds) - how often to re-fetch pricing data
+PRICING_CACHE_TTL = 86400  # 24 hours
+
 # Memory safety margin - don't use all available memory
 MEMORY_SAFETY_MARGIN = 0.7           # Use only 70% of available memory
 
@@ -214,3 +240,76 @@ BROWSER_USER_AGENT = (
 )
 # Application UA for RSS feeds and API requests
 APP_USER_AGENT = 'PodcastAdRemover/1.0'
+
+
+# ============================================================
+# Model Name Normalization
+# ============================================================
+
+def normalize_model_key(name: str) -> str:
+    """Normalize a model name into a match key for pricing lookups.
+
+    Examples:
+        'Claude Sonnet 4.5'           -> 'claudesonnet45'
+        'claude-sonnet-4-5-20250929'  -> 'claudesonnet45'
+        'anthropic/claude-sonnet-4-5' -> 'claudesonnet45'
+        'gpt-4o-mini'                 -> 'gpt4omini'
+        'gpt-4o-2024-05-13'          -> 'gpt4o'
+
+    Note: normalization is intentionally lossy (strips punctuation, hyphens).
+    OpenRouter variants (:free, :extended) map to the same key as the base model.
+    """
+    # Strip provider prefix (anything before /)
+    if '/' in name:
+        name = name.split('/', 1)[1]
+    # Strip OpenRouter variant suffixes (:free, :extended, :beta, :nitro, etc.)
+    name = re.sub(r':[a-zA-Z]+$', '', name)
+    # Strip date suffixes: YYYYMMDD or YYYY-MM-DD at end (2020-2039 range)
+    name = re.sub(r'-?20[2-3]\d-?\d{2}-?\d{2}$', '', name)
+    # Lowercase, remove everything non-alphanumeric
+    return re.sub(r'[^a-z0-9]', '', name.lower())
+
+
+def get_pricing_source(provider: str, base_url: str = '') -> dict:
+    """Determine pricing source for the active provider.
+
+    Returns dict with:
+      'type': 'openrouter_api' | 'pricepertoken' | 'free' | 'unknown'
+      'url': full URL to fetch (for openrouter_api and pricepertoken types)
+    """
+    if provider == 'ollama':
+        return {'type': 'free'}
+
+    if provider == 'openrouter':
+        return {
+            'type': 'openrouter_api',
+            'url': 'https://openrouter.ai/api/v1/models',
+        }
+
+    if provider == 'anthropic':
+        return {
+            'type': 'pricepertoken',
+            'url': 'https://pricepertoken.com/pricing-page/provider/anthropic',
+        }
+
+    # Parse domain from base_url for openai-compatible providers
+    domain = urlparse(base_url or '').hostname or ''
+
+    for known_domain, slug_info in PROVIDER_PRICING_SLUGS.items():
+        if domain == known_domain or domain.endswith('.' + known_domain):
+            if slug_info is None:
+                return {
+                    'type': 'openrouter_api',
+                    'url': 'https://openrouter.ai/api/v1/models',
+                }
+            url_type, slug = slug_info
+            return {
+                'type': 'pricepertoken',
+                'url': f'https://pricepertoken.com/{url_type}/{slug}',
+            }
+
+    # localhost, unknown domains -> likely local/self-hosted
+    if domain in ('localhost', '127.0.0.1', '::1') or domain.endswith('.local'):
+        return {'type': 'free'}
+
+    return {'type': 'unknown', 'domain': domain}

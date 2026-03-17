@@ -24,16 +24,18 @@ def get_processing_history():
     db = get_database()
 
     # Parse query params
-    limit = request.args.get('limit', 50, type=int)
-    offset = request.args.get('offset', 0, type=int)
+    limit = min(max(1, request.args.get('limit', 50, type=int)), 100)
+    explicit_page = request.args.get('page', None, type=int)
+    if explicit_page is not None:
+        page = max(1, explicit_page)
+        offset = (page - 1) * limit
+    else:
+        offset = max(0, request.args.get('offset', 0, type=int))
+        page = (offset // limit) + 1
     status_filter = request.args.get('status')  # 'completed' or 'failed'
     podcast_slug = request.args.get('podcast')
     sort_by = request.args.get('sort_by', 'processed_at')
     sort_dir = request.args.get('sort_dir', 'desc')
-
-    # Clamp limits
-    limit = min(max(1, limit), 100)
-    offset = max(0, offset)
 
     entries, total_count = db.get_processing_history(
         limit=limit,
@@ -68,6 +70,7 @@ def get_processing_history():
         'history': history,
         'total': total_count,
         'totalPages': math.ceil(total_count / limit) if total_count > 0 else 1,
+        'page': page,
         'limit': limit,
         'offset': offset
     })

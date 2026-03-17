@@ -11,7 +11,8 @@ from utils.text import extract_text_from_segments
 from llm_client import (
     get_llm_client, get_api_key, LLMClient,
     APIError, RateLimitError, is_rate_limit_error,
-    get_llm_timeout
+    get_llm_timeout, get_effective_provider,
+    PROVIDER_ANTHROPIC,
 )
 
 logger = logging.getLogger(__name__)
@@ -36,7 +37,6 @@ def get_chapters_model() -> str:
 
         # Provider-aware fallback: use the primary detection model for non-Anthropic providers
         # (Ollama doesn't have Anthropic model names like claude-haiku-4-5-20251001)
-        from llm_client import get_effective_provider, PROVIDER_ANTHROPIC
         provider = get_effective_provider()
         if provider != PROVIDER_ANTHROPIC:
             primary_model = db.get_setting('claude_model')

@@ -22,6 +22,7 @@ Removes ads from podcasts using Whisper transcription. Serves modified RSS feeds
 - [Using Ollama (Local LLM)](#using-ollama-local-llm)
 - [Remote Whisper Transcription](#remote-whisper-transcription)
 - [Using OpenRouter](#using-openrouter)
+- [LLM Pricing](#llm-pricing)
 - [API](#api)
 - [Webhooks](#webhooks)
 - [Remote Access](#remote-access)
@@ -629,6 +630,45 @@ All of these can be changed at runtime from the Settings UI -- no container rest
 
 See [`docker-compose.openrouter.yml`](docker-compose.openrouter.yml) for a full working example.
 
+## LLM Pricing
+
+MinusPod tracks token usage and cost for every LLM call. The Settings page and `GET /api/v1/system/token-usage` show per-model breakdowns.
+
+### Where pricing data comes from
+
+Pricing is fetched automatically based on your configured provider:
+
+| Provider | Source | Method |
+|----------|--------|--------|
+| Anthropic | [pricepertoken.com](https://pricepertoken.com) | HTML scrape |
+| OpenRouter | OpenRouter API (`/api/v1/models`) | JSON API |
+| OpenAI, Groq, Mistral, DeepSeek, xAI, Together, Fireworks, Perplexity, Google | [pricepertoken.com](https://pricepertoken.com) | HTML scrape |
+| Ollama / localhost | N/A | Always $0 |
+
+Pricing refreshes once every 24 hours in the background. You can also force a refresh from the API:
+
+```bash
+curl -X POST http://your-server:8000/api/v1/system/model-pricing/refresh
+```
+
+Or view current pricing:
+
+```bash
+curl http://your-server:8000/api/v1/system/model-pricing
+```
+
+### How model matching works
+
+Different sources use different names for the same model. A normalization step strips provider prefixes, date suffixes, and punctuation so that `claude-sonnet-4-5-20250929` (Anthropic API), `anthropic/claude-sonnet-4-5` (OpenRouter), and `Claude Sonnet 4.5` (pricepertoken.com display name) all resolve to the same pricing entry.
+
+### Offline / air-gapped installs
+
+If the pricing fetch fails on startup and no pricing data exists in the database, MinusPod seeds from a built-in table of Anthropic model prices. Non-Anthropic models will show $0 until the next successful fetch. Existing cached pricing in the database is never lost on fetch failure.
+
+### Pricing accuracy
+
+Pricing data comes from third-party sources and may lag behind provider announcements. Check your provider's billing dashboard for authoritative cost figures. MinusPod's cost tracking is an estimate for convenience, not a billing system.
+
 ## API
 
 REST API available at `/api/v1/`. Interactive docs at `/docs`. See `openapi.yaml` for full specification.
@@ -653,6 +693,7 @@ Key endpoints:
 - `GET /api/v1/status/stream` - SSE endpoint for real-time status updates
 - `GET /api/v1/system/token-usage` - LLM token usage and cost breakdown by model
 - `GET /api/v1/system/model-pricing` - All known LLM model pricing rates
+- `POST /api/v1/system/model-pricing/refresh` - Force refresh pricing from provider source
 - `POST /api/v1/system/vacuum` - Trigger SQLite VACUUM to reclaim disk space
 - `GET /api/v1/system/backup` - Download SQLite database backup
 - `GET /api/v1/settings` - Get current settings (includes LLM provider, API key status)

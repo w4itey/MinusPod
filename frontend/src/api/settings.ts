@@ -25,8 +25,9 @@ export async function resetPrompts(): Promise<{ message: string }> {
   });
 }
 
-export async function getModels(): Promise<ClaudeModel[]> {
-  const response = await apiRequest<{ models: ClaudeModel[] }>('/settings/models');
+export async function getModels(provider?: string): Promise<ClaudeModel[]> {
+  const params = provider ? `?provider=${encodeURIComponent(provider)}` : '';
+  const response = await apiRequest<{ models: ClaudeModel[] }>(`/settings/models${params}`);
   return response.models;
 }
 

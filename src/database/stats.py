@@ -2,6 +2,8 @@
 import logging
 from typing import Dict, List, Optional, Tuple
 
+from config import normalize_model_key
+
 logger = logging.getLogger(__name__)
 
 
@@ -92,31 +94,46 @@ class StatsMixin:
     # ========== Token Usage Methods ==========
 
     def _calculate_token_cost(self, conn, model_id: str,
-                              input_tokens: int, output_tokens: int) -> float:
-        """Calculate cost for a single LLM call based on model pricing.
+                              input_tokens: int, output_tokens: int,
+                              match_key: str = '') -> float:
+        """Calculate cost using normalized match_key lookup.
 
-        Tries exact match first, then prefix match for versioned model IDs.
-        Returns 0.0 with a warning for unknown models.
+        Resolution: exact match on match_key -> prefix match on match_key -> $0.
         """
-        # Exact match
+        if not match_key:
+            match_key = normalize_model_key(model_id)
+
+        logger.debug(f"Cost lookup: model_id='{model_id}' -> match_key='{match_key}'")
+
+        # Exact match on match_key
         cursor = conn.execute(
-            "SELECT input_cost_per_mtok, output_cost_per_mtok FROM model_pricing WHERE model_id = ?",
-            (model_id,)
+            "SELECT input_cost_per_mtok, output_cost_per_mtok "
+            "FROM model_pricing WHERE match_key = ?",
+            (match_key,)
         )
         row = cursor.fetchone()
 
-        # Prefix match: strip trailing version suffix (e.g. claude-sonnet-4-5-20250929 -> claude-sonnet-4-5)
+        # Prefix match fallback -- match_key must cover >= 80% of lookup key length
+        # to prevent short keys matching distinct longer models (e.g. 'gpt4o' must not match 'gpt4omini')
         if not row:
             cursor = conn.execute(
-                """SELECT input_cost_per_mtok, output_cost_per_mtok FROM model_pricing
-                   WHERE ? LIKE model_id || '%'
-                   ORDER BY length(model_id) DESC LIMIT 1""",
-                (model_id,)
+                """SELECT input_cost_per_mtok, output_cost_per_mtok
+                   FROM model_pricing
+                   WHERE ? LIKE match_key || '%'
+                     AND length(match_key) >= length(?) * 0.8
+                   ORDER BY length(match_key) DESC LIMIT 1""",
+                (match_key, match_key)
             )
             row = cursor.fetchone()
+            if row:
+                logger.warning(f"Cost lookup: prefix match for match_key='{match_key}' "
+                               f"-- verify pricing is correct")
 
         if not row:
-            logger.warning(f"No pricing found for model '{model_id}', cost recorded as $0")
+            logger.warning(
+                f"No pricing found for model '{model_id}' "
+                f"(match_key='{match_key}'), cost recorded as $0"
+            )
             return 0.0
 
         input_cost = (input_tokens / 1_000_000) * row['input_cost_per_mtok']
@@ -130,37 +147,43 @@ class StatsMixin:
             return 0.0
 
         conn = self.get_connection()
-        cost = self._calculate_token_cost(conn, model_id, input_tokens, output_tokens)
+        match_key = normalize_model_key(model_id)
+        cost = self._calculate_token_cost(conn, model_id, input_tokens, output_tokens,
+                                          match_key=match_key)
 
         # Upsert per-model token_usage row
         conn.execute(
-            """INSERT INTO token_usage (model_id, total_input_tokens, total_output_tokens, total_cost, call_count, updated_at)
-               VALUES (?, ?, ?, ?, 1, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+            """INSERT INTO token_usage
+                   (model_id, match_key, total_input_tokens, total_output_tokens,
+                    total_cost, call_count, updated_at)
+               VALUES (?, ?, ?, ?, ?, 1, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
                ON CONFLICT(model_id) DO UPDATE SET
+                 match_key = excluded.match_key,
                  total_input_tokens = total_input_tokens + excluded.total_input_tokens,
                  total_output_tokens = total_output_tokens + excluded.total_output_tokens,
                  total_cost = total_cost + excluded.total_cost,
                  call_count = call_count + 1,
                  updated_at = excluded.updated_at""",
-            (model_id, input_tokens, output_tokens, cost)
+            (model_id, match_key, input_tokens, output_tokens, cost)
         )
 
         # Update global stats counters
-        for key, value in [('total_input_tokens', float(input_tokens)),
-                           ('total_output_tokens', float(output_tokens)),
-                           ('total_llm_cost', cost)]:
+        for stat_key, value in [('total_input_tokens', float(input_tokens)),
+                                ('total_output_tokens', float(output_tokens)),
+                                ('total_llm_cost', cost)]:
             conn.execute(
                 """INSERT INTO stats (key, value, updated_at)
                    VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
                    ON CONFLICT(key) DO UPDATE SET
                      value = value + excluded.value,
                      updated_at = excluded.updated_at""",
-                (key, value)
+                (stat_key, value)
             )
 
         conn.commit()
         logger.debug(
-            f"Token usage: model={model_id} in={input_tokens} out={output_tokens} cost=${cost:.6f}"
+            f"Token usage: model={model_id} match_key={match_key} "
+            f"in={input_tokens} out={output_tokens} cost=${cost:.6f}"
         )
         return cost
 
@@ -179,7 +202,7 @@ class StatsMixin:
                       tu.total_cost, tu.call_count,
                       mp.display_name, mp.input_cost_per_mtok, mp.output_cost_per_mtok
                FROM token_usage tu
-               LEFT JOIN model_pricing mp ON tu.model_id = mp.model_id
+               LEFT JOIN model_pricing mp ON tu.match_key = mp.match_key
                ORDER BY tu.total_cost DESC"""
         )
 
@@ -192,8 +215,8 @@ class StatsMixin:
                 'totalOutputTokens': row['total_output_tokens'],
                 'totalCost': round(row['total_cost'], 6),
                 'callCount': row['call_count'],
-                'inputCostPerMtok': row['input_cost_per_mtok'] if row['input_cost_per_mtok'] is not None else None,
-                'outputCostPerMtok': row['output_cost_per_mtok'] if row['output_cost_per_mtok'] is not None else None,
+                'inputCostPerMtok': row['input_cost_per_mtok'],
+                'outputCostPerMtok': row['output_cost_per_mtok'],
             })
 
         return {

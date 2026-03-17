@@ -58,10 +58,12 @@ def background_rss_refresh():
     graceful shutdown interruption.
     """
     from main_app.feeds import refresh_all_feeds
+    from pricing_fetcher import refresh_pricing_if_stale
     _, _, shutdown_event, _, _ = _get_components()
     while not shutdown_event.is_set():
         refresh_all_feeds()
         run_cleanup()
+        refresh_pricing_if_stale()  # TTL-gated, fetches once per 24h
         # Wait 15 minutes, but allow early exit on shutdown
         shutdown_event.wait(timeout=900)
 

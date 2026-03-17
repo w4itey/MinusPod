@@ -335,7 +335,7 @@ def _detect_ads_first_pass(slug, episode_id, segments, audio_path,
 
 def _refine_and_validate(slug, episode_id, all_ads, segments, audio_path,
                           episode_description, episode_duration, min_cut_confidence,
-                          podcast_name):
+                          podcast_name, skip_patterns=False):
     """Pipeline stage: Refine ad boundaries, detect rolls, validate, gate by confidence.
 
     Returns (ads_to_remove, all_ads_with_validation).
@@ -357,7 +357,8 @@ def _refine_and_validate(slug, episode_id, all_ads, segments, audio_path,
     # Heuristic pre/post-roll detection
     if segments:
         from roll_detector import detect_preroll, detect_postroll
-        preroll_ad = detect_preroll(segments, all_ads, podcast_name=podcast_name)
+        preroll_ad = detect_preroll(segments, all_ads, podcast_name=podcast_name,
+                                    skip_patterns=skip_patterns)
         if preroll_ad:
             all_ads.append(preroll_ad)
             audio_logger.info(f"[{slug}:{episode_id}] Heuristic pre-roll: 0.0s-{preroll_ad['end']:.1f}s")
@@ -484,7 +485,8 @@ def _run_verification_pass(slug, episode_id, processed_path, ads_to_remove,
             processed_dur = verification_segments[-1]['end'] if verification_segments else 0
             ts_map = _build_timestamp_map(ads_to_remove) if ads_to_remove else None
 
-            preroll_v = detect_preroll(verification_segments, verification_ads_processed, podcast_name=podcast_name)
+            preroll_v = detect_preroll(verification_segments, verification_ads_processed,
+                                      podcast_name=podcast_name, skip_patterns=skip_patterns)
             if preroll_v:
                 verification_ads_processed.append(preroll_v)
                 mapped = preroll_v.copy()
@@ -813,7 +815,8 @@ def process_episode(slug: str, episode_id: str, episode_url: str,
 
             ads_to_remove, all_ads_with_validation = _refine_and_validate(
                 slug, episode_id, all_ads, segments, audio_path,
-                episode_description, episode_duration, min_cut_confidence, podcast_name
+                episode_description, episode_duration, min_cut_confidence, podcast_name,
+                skip_patterns=skip_patterns
             )
             _check_cancel(cancel_event, slug, episode_id)
 

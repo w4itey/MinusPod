@@ -12,7 +12,7 @@ info:
     - Monitor system status and trigger cleanup operations
     - Manage cross-episode ad patterns with network and podcast scope
     - Submit corrections to improve ad detection accuracy
-  version: 1.0.74
+  version: 1.0.82
   contact:
     name: MinusPod
   license:
@@ -1955,6 +1955,12 @@ paths:
             type: integer
             minimum: 0
             default: 0
+        - name: page
+          in: query
+          description: Page number (1-based). Alternative to offset. If both provided, page takes precedence.
+          schema:
+            type: integer
+            minimum: 1
         - name: sort_by
           in: query
           description: Column to sort by
@@ -1991,6 +1997,9 @@ paths:
                     type: integer
                   offset:
                     type: integer
+                  page:
+                    type: integer
+                    description: Current page number (1-based)
 
   /history/stats:
     get:
@@ -2225,8 +2234,16 @@ paths:
       tags:
         - Settings
       summary: Get available AI models
-      description: Returns list of available AI models for ad detection
+      description: Returns list of available AI models for ad detection. Optionally accepts a provider query param to preview models for a different provider before saving settings.
       operationId: getAvailableModels
+      parameters:
+        - name: provider
+          in: query
+          required: false
+          description: Preview models for this provider without saving settings. Valid values are anthropic, openrouter, openai-compatible, ollama.
+          schema:
+            type: string
+            enum: [anthropic, openrouter, openai-compatible, ollama]
       responses:
         '200':
           description: List of available models
@@ -2239,6 +2256,15 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/Model'
+        '400':
+          description: Invalid provider parameter
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
 
   /settings/models/refresh:
     post:
@@ -2407,6 +2433,14 @@ paths:
       summary: Get model pricing rates
       description: Returns all known LLM model pricing rates from the model_pricing table
       operationId: getModelPricing
+      parameters:
+        - name: source
+          in: query
+          required: false
+          description: Filter pricing entries by source
+          schema:
+            type: string
+            enum: [openrouter_api, pricepertoken, default, legacy]
       responses:
         '200':
           description: Model pricing list
@@ -2421,9 +2455,12 @@ paths:
                     items:
                       type: object
                       properties:
-                        modelId:
+                        matchKey:
                           type: string
-                          description: Model identifier
+                          description: Normalized model key for pricing lookups
+                        rawModelId:
+                          type: string
+                          description: Original model identifier from pricing source
                         displayName:
                           type: string
                           description: Human-readable model name
@@ -2433,9 +2470,42 @@ paths:
                         outputCostPerMtok:
                           type: number
                           description: Output cost per million tokens (USD)
+                        source:
+                          type: string
+                          description: Pricing data source (openrouter_api, pricepertoken, default, legacy)
                         updatedAt:
                           type: string
                           description: Last updated timestamp
+
+  /system/model-pricing/refresh:
+    post:
+      tags:
+        - System
+      summary: Force refresh model pricing
+      description: Force refresh pricing data from the active provider's pricing source (OpenRouter API or pricepertoken.com)
+      operationId: refreshModelPricing
+      responses:
+        '200':
+          description: Pricing refreshed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  modelsUpdated:
+                    type: integer
+                    description: Number of models with pricing data
+        '502':
+          description: Pricing fetch failed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
 
   /system/cleanup:
     post:

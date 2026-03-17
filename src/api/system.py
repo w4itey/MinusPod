@@ -12,6 +12,7 @@ from api import (
     api, limiter, log_request, json_response, error_response,
     get_database, get_storage, _get_version, _start_time,
 )
+from pricing_fetcher import force_refresh_pricing
 
 logger = logging.getLogger('podcast.api')
 
@@ -119,9 +120,28 @@ def get_token_usage():
 @api.route('/system/model-pricing', methods=['GET'])
 @log_request
 def get_model_pricing():
-    """Get all known model pricing rates."""
+    """Get known model pricing rates, optionally filtered by source."""
     db = get_database()
-    return json_response({'models': db.get_model_pricing()})
+    source = request.args.get('source')
+    return json_response({'models': db.get_model_pricing(source=source)})
+
+
+@api.route('/system/model-pricing/refresh', methods=['POST'])
+@limiter.limit("6 per hour")
+@log_request
+def refresh_model_pricing():
+    """Force refresh pricing data from provider's pricing source."""
+    try:
+        force_refresh_pricing()
+        db = get_database()
+        pricing = db.get_model_pricing()
+        return json_response({
+            'status': 'ok',
+            'modelsUpdated': len(pricing),
+        })
+    except Exception as e:
+        logger.error(f"Manual pricing refresh failed: {e}")
+        return error_response('Pricing refresh failed, check server logs', 502)
 
 
 @api.route('/system/cleanup', methods=['POST'])

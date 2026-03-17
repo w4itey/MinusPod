@@ -654,12 +654,19 @@ class TestTokenUsage:
         cost = temp_db._calculate_token_cost(conn, 'claude-haiku-4-5-20251001', 1_000_000, 1_000_000)
         assert abs(cost - 6.0) < 0.001  # $1 input + $5 output
 
-    def test_calculate_token_cost_prefix_match(self, temp_db):
-        """Model ID with extra suffix matches on prefix."""
+    def test_calculate_token_cost_prefix_match_close_length(self, temp_db):
+        """Prefix match works when stored key covers >= 80% of lookup key length."""
         conn = temp_db.get_connection()
-        # 'claude-haiku-4-5-20251001-extra' should prefix-match to 'claude-haiku-4-5-20251001'
-        cost = temp_db._calculate_token_cost(conn, 'claude-haiku-4-5-20251001-extra', 1_000_000, 0)
+        # 'claudehaiku45x' (14 chars) vs stored 'claudehaiku45' (13 chars): 13 >= 14*0.8=11.2 -> match
+        cost = temp_db._calculate_token_cost(conn, 'claude-haiku-4-5x', 1_000_000, 0, match_key='claudehaiku45x')
         assert abs(cost - 1.0) < 0.001
+
+    def test_calculate_token_cost_prefix_match_rejected_short_key(self, temp_db):
+        """Prefix match rejects when stored key is much shorter than lookup key."""
+        conn = temp_db.get_connection()
+        # 'claudehaiku4520251001extra' (24 chars) vs stored 'claudehaiku45' (13 chars): 13 < 24*0.8 -> no match
+        cost = temp_db._calculate_token_cost(conn, 'claude-haiku-4-5-20251001-extra', 1_000_000, 0)
+        assert cost == 0.0
 
     def test_calculate_token_cost_unknown_model(self, temp_db):
         """Unknown model returns 0 cost without crashing."""

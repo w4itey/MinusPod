@@ -307,7 +307,7 @@ class AnthropicClient(LLMClient):
 
         llm_response = LLMResponse(
             content=content,
-            model=response.model,
+            model=model,
             usage={
                 'input_tokens': response.usage.input_tokens,
                 'output_tokens': response.usage.output_tokens
@@ -468,7 +468,7 @@ class OpenAICompatibleClient(LLMClient):
 
         llm_response = LLMResponse(
             content=content,
-            model=response.model,
+            model=model,
             usage={
                 'input_tokens': response.usage.prompt_tokens,
                 'output_tokens': response.usage.completion_tokens
@@ -612,6 +612,7 @@ def get_llm_max_retries() -> int:
 # =============================================================================
 
 _cached_client: Optional[LLMClient] = None
+_client_lock = threading.Lock()
 
 # Per-episode token accumulator using thread-local storage.
 # Each thread (background processor, HTTP handler) gets its own
@@ -707,16 +708,29 @@ def get_llm_client(force_new: bool = False) -> LLMClient:
     if force_new:
         _clear_provider_cache()
 
-    if _cached_client is not None and not force_new:
+    with _client_lock:
+        if _cached_client is not None and not force_new:
+            return _cached_client
+
+        provider = get_effective_provider()
+
+        _cached_client = _build_client(provider)
+        if _cached_client is None:
+            logger.warning(f"Unknown LLM_PROVIDER '{provider}', defaulting to anthropic")
+            _cached_client = AnthropicClient()
+
+        _cached_client.set_usage_callback(_record_token_usage)
+        logger.info(f"LLM client initialized: {_cached_client.get_provider_name()}")
         return _cached_client
 
-    provider = get_effective_provider()
 
+def _build_client(provider: str) -> Optional[LLMClient]:
+    """Build an LLM client for a given provider without caching."""
     if provider == PROVIDER_ANTHROPIC:
-        _cached_client = AnthropicClient()
+        return AnthropicClient()
     elif provider == PROVIDER_OPENROUTER:
         api_key = get_effective_openrouter_api_key() or 'not-needed'
-        _cached_client = OpenAICompatibleClient(
+        return OpenAICompatibleClient(
             base_url=OPENROUTER_BASE_URL,
             api_key=api_key,
             extra_headers={
@@ -729,14 +743,25 @@ def get_llm_client(force_new: bool = False) -> LLMClient:
         if provider == PROVIDER_OLLAMA and not base_url.rstrip('/').endswith('/v1'):
             base_url = base_url.rstrip('/') + '/v1'
             logger.info(f"Ollama provider: normalized base_url to {base_url}")
-        _cached_client = OpenAICompatibleClient(base_url=base_url)
-    else:
-        logger.warning(f"Unknown LLM_PROVIDER '{provider}', defaulting to anthropic")
-        _cached_client = AnthropicClient()
+        return OpenAICompatibleClient(base_url=base_url)
+    return None
 
-    _cached_client.set_usage_callback(_record_token_usage)
-    logger.info(f"LLM client initialized: {_cached_client.get_provider_name()}")
-    return _cached_client
+
+def create_client_for_provider(provider: str) -> Optional[LLMClient]:
+    """Create a non-cached LLM client for a specific provider.
+
+    Used for previewing available models before saving provider settings.
+    Unlike get_llm_client(), this does not touch the global cache and does
+    not set a usage callback -- only suitable for list_models() calls.
+    """
+    try:
+        client = _build_client(provider)
+        if client is None:
+            logger.warning(f"Unknown provider '{provider}' for preview client")
+        return client
+    except Exception as e:
+        logger.error(f"Failed to create preview client for provider '{provider}': {e}")
+        return None
 
 
 def get_api_key() -> Optional[str]:

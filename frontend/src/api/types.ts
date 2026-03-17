@@ -186,6 +186,7 @@ export interface ClaudeModel {
   name: string;
   inputCostPerMtok?: number;
   outputCostPerMtok?: number;
+  pricingSource?: string;
 }
 
 export interface WhisperModel {

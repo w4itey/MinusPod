@@ -12,6 +12,7 @@ from flask_limiter.util import get_remote_address
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
 
+from config import normalize_model_key
 from utils.time import parse_timestamp
 from utils.text import extract_text_in_range
 from utils.url import validate_url, SSRFError
@@ -230,19 +231,27 @@ def get_status_service():
 
 
 def _enrich_models_with_pricing(models: list) -> None:
-    """Refresh and attach pricing info to a list of model dicts in-place, then sort alphabetically."""
+    """Attach pricing info to a list of model dicts using match_key lookups, then sort."""
     try:
         db = get_database()
-        db.refresh_model_pricing(models)
         pricing_rows = db.get_model_pricing()
-        pricing_lookup = {p['modelId']: p for p in pricing_rows}
+        pricing_lookup = {p['matchKey']: p for p in pricing_rows}
+
         for model in models:
-            pricing = pricing_lookup.get(model['id'])
+            key = normalize_model_key(model.get('id', ''))
+            pricing = pricing_lookup.get(key)
             if pricing:
                 model['inputCostPerMtok'] = pricing['inputCostPerMtok']
                 model['outputCostPerMtok'] = pricing['outputCostPerMtok']
+                model['pricingSource'] = pricing['source']
+            else:
+                logger.debug(
+                    f"No pricing match for model '{model.get('id')}' "
+                    f"(match_key='{key}')"
+                )
     except Exception as e:
-        logger.warning(f"Failed to refresh model pricing: {e}")
+        logger.warning(f"Failed to enrich models with pricing: {e}")
+
     models.sort(key=lambda m: (m.get('name') or m.get('id', '')).lower())
 
 

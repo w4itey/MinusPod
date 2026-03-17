@@ -101,17 +101,20 @@ def detect_preroll(
     segments: List[Dict],
     existing_ads: List[Dict],
     podcast_name: str = '',
+    skip_patterns: bool = False,
 ) -> Optional[Dict]:
     """Detect pre-roll ad before the show intro.
 
     Searches forward from the start for the first show-start pattern.
-    If transcript content before it matches >= MIN_AD_PATTERN_MATCHES ad
-    patterns, creates an ad marker.
+    If transcript content before it matches >= threshold ad patterns,
+    creates an ad marker.
 
     Args:
         segments: Transcript segments with 'start', 'end', 'text' keys
         existing_ads: Already-detected ads to avoid duplicates
         podcast_name: Podcast name (unused, reserved for future filtering)
+        skip_patterns: When True (Full reprocess mode), lower match threshold
+            from MIN_AD_PATTERN_MATCHES to 1 since Stages 1 & 2 are skipped
 
     Returns:
         Ad marker dict if pre-roll detected, None otherwise
@@ -146,7 +149,8 @@ def detect_preroll(
     preroll_text = _segments_to_text(segments, episode_start, show_start_time)
     match_count = _count_ad_patterns(preroll_text)
 
-    if match_count < MIN_AD_PATTERN_MATCHES:
+    threshold = 1 if skip_patterns else MIN_AD_PATTERN_MATCHES
+    if match_count < threshold:
         return None
 
     confidence = min(0.7 + (match_count * 0.05), 0.95)

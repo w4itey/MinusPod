@@ -62,8 +62,8 @@ function Settings() {
   });
 
   const { data: models, isLoading: modelsLoading } = useQuery({
-    queryKey: ['models'],
-    queryFn: getModels,
+    queryKey: ['models', llmProvider],
+    queryFn: () => getModels(llmProvider),
   });
 
   const { data: whisperModels } = useQuery({
@@ -196,8 +196,8 @@ function Settings() {
 
   const refreshModelsMutation = useMutation({
     mutationFn: refreshModels,
-    onSuccess: (data) => {
-      queryClient.setQueryData(['models'], data.models);
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['models'] });
     },
   });
 
@@ -275,6 +275,9 @@ function Settings() {
         onProviderChange={(p) => {
           setLlmProvider(p);
           if (p !== LLM_PROVIDERS.OPENROUTER) setOpenrouterApiKey('');
+          setSelectedModel('');
+          setVerificationModel('');
+          setChaptersModel('');
         }}
         onBaseUrlChange={setOpenaiBaseUrl}
         onOpenrouterApiKeyChange={setOpenrouterApiKey}

@@ -230,15 +230,21 @@ CREATE INDEX IF NOT EXISTS idx_normalizations_pattern ON sponsor_normalizations(
 -- model_pricing table (LLM model cost rates)
 CREATE TABLE IF NOT EXISTS model_pricing (
     model_id TEXT PRIMARY KEY,
+    match_key TEXT,
+    raw_model_id TEXT,
     display_name TEXT NOT NULL,
     input_cost_per_mtok REAL NOT NULL,
     output_cost_per_mtok REAL NOT NULL,
+    source TEXT DEFAULT 'legacy',
     updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_model_pricing_match_key ON model_pricing(match_key);
 
 -- token_usage table (per-model cumulative LLM token usage)
 CREATE TABLE IF NOT EXISTS token_usage (
     model_id TEXT PRIMARY KEY,
+    match_key TEXT,
     total_input_tokens INTEGER NOT NULL DEFAULT 0,
     total_output_tokens INTEGER NOT NULL DEFAULT 0,
     total_cost REAL NOT NULL DEFAULT 0.0,
@@ -411,9 +417,12 @@ class SchemaMixin:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS model_pricing (
                 model_id TEXT PRIMARY KEY,
+                match_key TEXT,
+                raw_model_id TEXT,
                 display_name TEXT NOT NULL,
                 input_cost_per_mtok REAL NOT NULL,
                 output_cost_per_mtok REAL NOT NULL,
+                source TEXT DEFAULT 'legacy',
                 updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
             )
         """)
@@ -422,6 +431,7 @@ class SchemaMixin:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS token_usage (
                 model_id TEXT PRIMARY KEY,
+                match_key TEXT,
                 total_input_tokens INTEGER NOT NULL DEFAULT 0,
                 total_output_tokens INTEGER NOT NULL DEFAULT 0,
                 total_cost REAL NOT NULL DEFAULT 0.0,
@@ -447,7 +457,7 @@ class SchemaMixin:
             logger.info(f"Migration: Added {column} column to {table} table")
             return True
         except Exception as e:
-            logger.error(f"Migration failed for {table}.{column}: {e}")
+            logger.warning(f"Migration failed for {table}.{column}: {e}")
             return False
 
     def _rename_column_if_needed(self, conn, table: str, old_name: str,
@@ -460,7 +470,7 @@ class SchemaMixin:
                 logger.info(f"Migration: Renamed {table}.{old_name} to {new_name}")
                 return True
             except Exception as e:
-                logger.error(f"Migration failed for {table} rename {old_name}: {e}")
+                logger.warning(f"Migration failed for {table} rename {old_name}: {e}")
         return False
 
     def _get_table_columns(self, conn, table: str) -> set:
@@ -871,15 +881,19 @@ class SchemaMixin:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS model_pricing (
                     model_id TEXT PRIMARY KEY,
+                    match_key TEXT,
+                    raw_model_id TEXT,
                     display_name TEXT NOT NULL,
                     input_cost_per_mtok REAL NOT NULL,
                     output_cost_per_mtok REAL NOT NULL,
+                    source TEXT DEFAULT 'legacy',
                     updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
                 )
             """)
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS token_usage (
                     model_id TEXT PRIMARY KEY,
+                    match_key TEXT,
                     total_input_tokens INTEGER NOT NULL DEFAULT 0,
                     total_output_tokens INTEGER NOT NULL DEFAULT 0,
                     total_cost REAL NOT NULL DEFAULT 0.0,
@@ -888,9 +902,13 @@ class SchemaMixin:
                 )
             """)
             # Seed default pricing (ON CONFLICT DO NOTHING preserves manual edits)
+            # Use old column format -- new columns (match_key, raw_model_id, source)
+            # are added by the ALTER TABLE migration block that follows, then backfilled.
             for model_id, info in DEFAULT_MODEL_PRICING.items():
                 conn.execute(
-                    """INSERT INTO model_pricing (model_id, display_name, input_cost_per_mtok, output_cost_per_mtok)
+                    """INSERT INTO model_pricing
+                           (model_id, display_name,
+                            input_cost_per_mtok, output_cost_per_mtok)
                        VALUES (?, ?, ?, ?)
                        ON CONFLICT(model_id) DO NOTHING""",
                     (model_id, info['name'], info['input'], info['output'])
@@ -899,6 +917,75 @@ class SchemaMixin:
             logger.info("Migration: Created token usage tables and seeded model pricing")
         except Exception as e:
             logger.warning(f"Migration failed for token usage tables: {e}")
+
+        # Migration: Add match_key, raw_model_id, source columns to model_pricing
+        try:
+            from config import normalize_model_key
+            mp_cols = self._get_table_columns(conn, 'model_pricing')
+            self._add_column_if_missing(conn, 'model_pricing', 'match_key', 'TEXT', mp_cols)
+            self._add_column_if_missing(conn, 'model_pricing', 'raw_model_id', 'TEXT', mp_cols)
+            self._add_column_if_missing(conn, 'model_pricing', 'source', "TEXT DEFAULT 'legacy'", mp_cols)
+
+            # Backfill match_key for existing rows
+            rows = conn.execute(
+                "SELECT model_id FROM model_pricing WHERE match_key IS NULL"
+            ).fetchall()
+            if rows:
+                for row in rows:
+                    key = normalize_model_key(row['model_id'])
+                    conn.execute(
+                        "UPDATE model_pricing SET match_key = ?, raw_model_id = ? WHERE model_id = ?",
+                        (key, row['model_id'], row['model_id'])
+                    )
+
+                # Deduplicate: if multiple model_ids map to the same match_key,
+                # keep the row with the highest rowid per match_key
+                dupes = conn.execute("""
+                    SELECT model_id, match_key FROM model_pricing
+                    WHERE rowid NOT IN (
+                        SELECT MAX(rowid) FROM model_pricing
+                        GROUP BY match_key
+                    )
+                """).fetchall()
+                if dupes:
+                    for dupe in dupes:
+                        logger.info(f"Migration: Removing duplicate model_pricing row: "
+                                    f"model_id={dupe['model_id']} match_key={dupe['match_key']}")
+                    conn.execute("""
+                        DELETE FROM model_pricing
+                        WHERE rowid NOT IN (
+                            SELECT MAX(rowid) FROM model_pricing
+                            GROUP BY match_key
+                        )
+                    """)
+                conn.commit()
+                logger.info(f"Migration: Backfilled match_key for {len(rows)} model_pricing rows")
+
+            # Create UNIQUE index on match_key (after backfill + dedup)
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_model_pricing_match_key ON model_pricing(match_key)"
+            )
+            conn.commit()
+
+            # Add match_key to token_usage
+            tu_cols = self._get_table_columns(conn, 'token_usage')
+            self._add_column_if_missing(conn, 'token_usage', 'match_key', 'TEXT', tu_cols)
+
+            # Backfill match_key for existing token_usage rows
+            tu_rows = conn.execute(
+                "SELECT model_id FROM token_usage WHERE match_key IS NULL"
+            ).fetchall()
+            if tu_rows:
+                for row in tu_rows:
+                    key = normalize_model_key(row['model_id'])
+                    conn.execute(
+                        "UPDATE token_usage SET match_key = ? WHERE model_id = ?",
+                        (key, row['model_id'])
+                    )
+                conn.commit()
+                logger.info(f"Migration: Backfilled match_key for {len(tu_rows)} token_usage rows")
+        except Exception as e:
+            logger.warning(f"Migration failed for match_key backfill: {e}")
 
         # Migration: Add token tracking columns to processing_history
         hist_cols = self._get_table_columns(conn, 'processing_history')
