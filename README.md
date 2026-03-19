@@ -306,7 +306,9 @@ Customize ad detection in Settings:
 
 ## Finding Podcast RSS Feeds
 
-Most podcasts publish RSS feeds. Common ways to find them:
+MinusPod includes a built-in podcast search powered by [PodcastIndex.org](https://podcastindex.org). Search by name directly from the Add Feed page. To enable search, get free API credentials at [api.podcastindex.org/signup](https://api.podcastindex.org/signup) and add them in Settings > Podcast Search.
+
+You can also find RSS feeds manually:
 
 1. **Podcast website** - Look for "RSS" link in footer or subscription options
 2. **Apple Podcasts** - Search on [podcastindex.org](https://podcastindex.org) using the Apple Podcasts URL

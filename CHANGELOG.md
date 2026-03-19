@@ -24,6 +24,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Dashboard toolbar overflow on mobile**: Button row now scrolls horizontally instead of wrapping.
 - **Feed URL hidden on mobile**: Feed URL in FeedDetail now visible on all screen sizes.
 - **ActionButtons inconsistent disabled states**: Standardized button padding and added disabled:opacity-50 across all variants.
+- **PodcastIndex save bar logic**: Save bar now requires both API key and secret to be filled, not just one.
+- **Data Management button alignment**: OPML Export and Database Backup buttons now align vertically across cards regardless of description height.
+- **Dashboard Export OPML redundancy**: Removed Export OPML button from Dashboard toolbar (already in Settings > Data Management). Heading wraps to its own line on narrow screens.
+- **Ad editor mobile-expanded button padding**: Added horizontal padding to mobile-expanded variant buttons so text doesn't touch edges.
+- **PWA icons regenerated from favicon.svg**: Icon-192, icon-512, and apple-touch-icon now match the favicon design.
+- **Favicon/apple-touch-icon 404 performance**: Added dedicated routes for /favicon.ico and /apple-touch-icon*.png to short-circuit expensive feed route lookups.
+- **README podcast search section**: Added built-in podcast search to "Finding Podcast RSS Feeds" documentation.
 
 ## [1.0.83] - 2026-03-17
 

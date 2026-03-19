@@ -89,7 +89,7 @@ function DataManagementSection({
     <CollapsibleSection title="Data Management" storageKey="settings-section-data-management">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* OPML Export Card */}
-        <div className="p-4 rounded-lg border border-border bg-background">
+        <div className="p-4 rounded-lg border border-border bg-background flex flex-col">
           <div className="flex items-start gap-3 mb-3">
             <div className="p-2 rounded bg-secondary flex-shrink-0">
               <svg className="h-5 w-5 text-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -105,7 +105,7 @@ function DataManagementSection({
               </p>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 mt-auto">
             <button
               onClick={() => handleExportOpml('modified')}
               disabled={opmlStatus === 'loading'}
@@ -125,7 +125,7 @@ function DataManagementSection({
         </div>
 
         {/* Database Backup Card */}
-        <div className="p-4 rounded-lg border border-border bg-background">
+        <div className="p-4 rounded-lg border border-border bg-background flex flex-col">
           <div className="flex items-start gap-3 mb-3">
             <div className="p-2 rounded bg-secondary flex-shrink-0">
               <svg className="h-5 w-5 text-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -144,7 +144,7 @@ function DataManagementSection({
           <button
             onClick={handleDownloadBackup}
             disabled={backupStatus === 'loading'}
-            className="w-full px-4 py-2 rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 disabled:opacity-50 transition-colors text-sm font-medium"
+            className="mt-auto w-full px-4 py-2 rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 disabled:opacity-50 transition-colors text-sm font-medium"
           >
             {backupStatus === 'loading' ? 'Preparing...' : 'Download Backup'}
           </button>

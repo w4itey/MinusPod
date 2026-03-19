@@ -125,10 +125,10 @@ export function ActionButtons({
   // mobile-expanded
   return (
     <div className="flex items-center justify-center gap-2">
-      <button onClick={onReject} disabled={saveStatus === 'saving'} className="flex-1 py-3 rounded-lg bg-destructive/10 text-destructive text-sm font-medium touch-manipulation active:scale-95 transition-all disabled:opacity-50">Not Ad</button>
-      <button onClick={onReset} disabled={saveStatus === 'saving'} className="flex-1 py-3 rounded-lg bg-muted text-sm font-medium touch-manipulation active:scale-95 transition-all disabled:opacity-50">Reset</button>
-      <button onClick={onConfirm} disabled={saveStatus === 'saving'} className="flex-1 py-3 rounded-lg bg-green-600 text-white text-sm font-medium touch-manipulation active:scale-95 transition-all disabled:opacity-50">Confirm</button>
-      <button onClick={onSave} disabled={saveStatus === 'saving'} className="flex-1 py-3 rounded-lg bg-primary text-primary-foreground text-sm font-medium touch-manipulation active:scale-95 transition-all disabled:opacity-50">Save</button>
+      <button onClick={onReject} disabled={saveStatus === 'saving'} className="flex-1 px-2 py-3 rounded-lg bg-destructive/10 text-destructive text-sm font-medium touch-manipulation active:scale-95 transition-all disabled:opacity-50">Not Ad</button>
+      <button onClick={onReset} disabled={saveStatus === 'saving'} className="flex-1 px-2 py-3 rounded-lg bg-muted text-sm font-medium touch-manipulation active:scale-95 transition-all disabled:opacity-50">Reset</button>
+      <button onClick={onConfirm} disabled={saveStatus === 'saving'} className="flex-1 px-2 py-3 rounded-lg bg-green-600 text-white text-sm font-medium touch-manipulation active:scale-95 transition-all disabled:opacity-50">Confirm</button>
+      <button onClick={onSave} disabled={saveStatus === 'saving'} className="flex-1 px-2 py-3 rounded-lg bg-primary text-primary-foreground text-sm font-medium touch-manipulation active:scale-95 transition-all disabled:opacity-50">Save</button>
     </div>
   );
 }

@@ -177,8 +177,7 @@ function Settings() {
       whisperApiConfig.apiKey !== '' ||
       whisperApiConfig.model !== (settings.whisperApiModel?.value || 'whisper-1') ||
       openrouterApiKey !== '' ||
-      podcastIndexApiKey !== '' ||
-      podcastIndexApiSecret !== ''
+      (podcastIndexApiKey !== '' && podcastIndexApiSecret !== '')
     );
   }, [systemPrompt, verificationPrompt, selectedModel, verificationModel, whisperModel, autoProcessEnabled, audioBitrate, vttTranscriptsEnabled, chaptersEnabled, chaptersModel, minCutConfidence, llmProvider, openaiBaseUrl, whisperBackend, whisperApiConfig.baseUrl, whisperApiConfig.apiKey, whisperApiConfig.model, openrouterApiKey, podcastIndexApiKey, podcastIndexApiSecret, settings]);
 
@@ -288,13 +287,13 @@ function Settings() {
       <SettingsGroupHeader title="Podcast Discovery" />
 
       <div id="podcast-index">
-      <PodcastIndexSection
-        podcastIndexApiKeyConfigured={settings?.podcastIndexApiKeyConfigured}
-        podcastIndexApiKey={podcastIndexApiKey}
-        podcastIndexApiSecret={podcastIndexApiSecret}
-        onApiKeyChange={setPodcastIndexApiKey}
-        onApiSecretChange={setPodcastIndexApiSecret}
-      />
+        <PodcastIndexSection
+          podcastIndexApiKeyConfigured={settings?.podcastIndexApiKeyConfigured}
+          podcastIndexApiKey={podcastIndexApiKey}
+          podcastIndexApiSecret={podcastIndexApiSecret}
+          onApiKeyChange={setPodcastIndexApiKey}
+          onApiSecretChange={setPodcastIndexApiSecret}
+        />
       </div>
 
       <SettingsGroupHeader title="AI & Processing" />
