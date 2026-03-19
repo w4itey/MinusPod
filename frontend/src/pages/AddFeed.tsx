@@ -187,7 +187,7 @@ function AddFeed() {
     return new Set(feedsData.map((f) => f.sourceUrl));
   }, [feedsData]);
 
-  // Debounced search with cancellation to prevent stale results
+  // Debounced search with AbortController to cancel stale requests
   useEffect(() => {
     if (isUrl || !podcastIndexConfigured || inputValue.trim().length < 2) {
       setSearchResults([]);
@@ -195,24 +195,24 @@ function AddFeed() {
       return;
     }
 
-    let cancelled = false;
+    const controller = new AbortController();
     const timer = setTimeout(async () => {
       setIsSearching(true);
       setSearchError(null);
       try {
-        const results = await searchPodcasts(inputValue.trim());
-        if (!cancelled) setSearchResults(results);
+        const results = await searchPodcasts(inputValue.trim(), controller.signal);
+        setSearchResults(results);
       } catch (err) {
-        if (!cancelled) {
+        if (!controller.signal.aborted) {
           setSearchError((err as Error).message);
           setSearchResults([]);
         }
       } finally {
-        if (!cancelled) setIsSearching(false);
+        if (!controller.signal.aborted) setIsSearching(false);
       }
     }, 400);
 
-    return () => { cancelled = true; clearTimeout(timer); };
+    return () => { controller.abort(); clearTimeout(timer); };
   }, [inputValue, isUrl, podcastIndexConfigured]);
 
   // Add feed mutation (for URL submit)
@@ -331,6 +331,7 @@ function AddFeed() {
         <details className="group">
           <summary className="text-sm text-primary hover:underline cursor-pointer list-none">
             Advanced options
+            <span className="text-muted-foreground font-normal"> -- applies to URL and search results</span>
           </summary>
           <div className="mt-4 space-y-4">
             <div>

@@ -309,7 +309,7 @@ def export_opml():
     podcasts = db.get_all_podcasts()
 
     if mode == 'modified':
-        base_url = os.environ.get('BASE_URL', 'http://localhost:8000')
+        base_url = os.environ.get('BASE_URL', 'http://localhost:8000').rstrip('/')
 
     opml = ET.Element('opml', version='2.0')
     head = ET.SubElement(opml, 'head')

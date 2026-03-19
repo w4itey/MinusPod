@@ -14,9 +14,10 @@ interface PodcastSearchResponse {
   results: PodcastSearchResult[];
 }
 
-export async function searchPodcasts(query: string): Promise<PodcastSearchResult[]> {
+export async function searchPodcasts(query: string, signal?: AbortSignal): Promise<PodcastSearchResult[]> {
   const resp = await apiRequest<PodcastSearchResponse>(
-    `/podcast-search?q=${encodeURIComponent(query)}`
+    `/podcast-search?q=${encodeURIComponent(query)}`,
+    { signal },
   );
   return resp.results;
 }

@@ -63,7 +63,12 @@ def search_podcasts():
         logger.error(f"PodcastIndex API error: {e}")
         return error_response('Failed to reach PodcastIndex API', 502)
 
-    data = resp.json()
+    try:
+        data = resp.json()
+    except ValueError:
+        logger.error("PodcastIndex returned non-JSON response")
+        return error_response('PodcastIndex returned an invalid response', 502)
+
     feeds = data.get('feeds', [])
 
     results = []
