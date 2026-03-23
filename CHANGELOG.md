@@ -6,6 +6,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.85] - 2026-03-23
+
+### Fixed
+- **Mobile copy button too wide**: Copy feed URL buttons in FeedDetail and FeedCard are now icon-only (no text label), matching FeedListItem.
+- **Feed URL overflow on mobile**: Feed URL text and label hidden on mobile in FeedDetail (only copy button shown). Truncated URL provided no value and overflowed the card boundary. Full URL still visible on sm+ screens.
+
 ## [1.0.84] - 2026-03-19
 
 ### Added
