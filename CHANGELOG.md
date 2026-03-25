@@ -6,6 +6,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.87] - 2026-03-25
+
+### Fixed
+- **Copy Feed URL label missing on desktop**: Removed `sm:hidden` from copy button text labels in FeedCard, FeedListItem, and FeedDetail so the label is visible on all screen sizes.
+
 ## [1.0.86] - 2026-03-25
 
 ### Fixed
