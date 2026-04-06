@@ -6,6 +6,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.93] - 2026-04-06
+
+### Added
+- **String confidence fallback**: LLM responses with string confidence values ("high", "medium", "low") are now mapped to numeric floats instead of being silently dropped. Mapping is configurable via `CONFIDENCE_STRING_MAP` in config.py. Also handles percentage strings like "95%". Values align with existing confidence thresholds (medium=0.80 matches MIN_CUT_CONFIDENCE).
+
 ## [1.0.92] - 2026-04-06
 
 ### Fixed

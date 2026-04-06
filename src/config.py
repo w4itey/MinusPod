@@ -11,6 +11,15 @@ from urllib.parse import urlparse
 # ============================================================
 # Confidence Thresholds (0.0 - 1.0 scale)
 # ============================================================
+CONFIDENCE_STRING_MAP = {
+    'high': 0.95,
+    'very high': 0.98,
+    'medium': 0.80,
+    'moderate': 0.80,
+    'low': 0.50,
+    'very low': 0.30,
+}
+
 LOW_CONFIDENCE = 0.50           # Warn/flag for review
 REJECT_CONFIDENCE = 0.30        # Auto-reject as false positive
 HIGH_CONFIDENCE_OVERRIDE = 0.90 # Override duration limits if above this
