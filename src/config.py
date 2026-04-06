@@ -3,6 +3,7 @@
 All magic numbers and thresholds should be defined here
 for easy tuning and consistency across the codebase.
 """
+import ipaddress
 import os
 import re
 from urllib.parse import urlparse
@@ -319,8 +320,14 @@ def get_pricing_source(provider: str, base_url: str = '') -> dict:
                 'url': f'https://pricepertoken.com/{url_type}/{slug}',
             }
 
-    # localhost, unknown domains -> likely local/self-hosted
+    # localhost, private IPs, unknown domains -> likely local/self-hosted
     if domain in ('localhost', '127.0.0.1', '::1') or domain.endswith('.local'):
         return {'type': 'free'}
+
+    try:
+        if ipaddress.ip_address(domain).is_private:
+            return {'type': 'free'}
+    except ValueError:
+        pass
 
     return {'type': 'unknown', 'domain': domain}

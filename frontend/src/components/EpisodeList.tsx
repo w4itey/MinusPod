@@ -76,7 +76,7 @@ function EpisodeRow({
       {onToggle && canSelect && (
         <div
           className="absolute top-3 left-3 z-10"
-          onClick={(e) => e.preventDefault()}
+          onClick={(e) => e.stopPropagation()}
         >
           <Checkbox
             checked={selected}

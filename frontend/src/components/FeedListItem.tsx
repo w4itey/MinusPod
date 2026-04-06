@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Feed } from '../api/types';
+import CopyButton from './CopyButton';
 
 interface FeedListItemProps {
   feed: Feed;
@@ -10,19 +11,6 @@ interface FeedListItemProps {
 
 function FeedListItem({ feed, onRefresh, onDelete, isRefreshing }: FeedListItemProps) {
   const artworkUrl = feed.artworkUrl || `/api/v1/feeds/${feed.slug}/artwork`;
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(feed.feedUrl);
-    } catch {
-      const input = document.createElement('input');
-      input.value = feed.feedUrl;
-      document.body.appendChild(input);
-      input.select();
-      document.execCommand('copy');
-      document.body.removeChild(input);
-    }
-  };
 
   return (
     <div className="bg-card rounded-lg border border-border p-3 flex items-center gap-4">
@@ -53,21 +41,7 @@ function FeedListItem({ feed, onRefresh, onDelete, isRefreshing }: FeedListItemP
         </p>
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">
-        <button
-          onClick={handleCopy}
-          className="flex items-center gap-1.5 p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-          title="Copy feed URL"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-            />
-          </svg>
-          <span className="text-xs">Copy URL</span>
-        </button>
+        <CopyButton text={feed.feedUrl} />
         <button
           onClick={() => onRefresh(feed.slug)}
           disabled={isRefreshing}

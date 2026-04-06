@@ -26,11 +26,11 @@ class VerificationPass:
     """
 
     def __init__(self, ad_detector, transcriber, audio_analyzer,
-                 sponsor_service=None, db=None):
+                 pattern_service=None, db=None):
         self.ad_detector = ad_detector
         self.transcriber = transcriber
         self.audio_analyzer = audio_analyzer
-        self.sponsor_service = sponsor_service
+        self.pattern_service = pattern_service
         self.db = db
 
     def verify(self, processed_audio_path: str, podcast_name: str,
@@ -125,9 +125,9 @@ class VerificationPass:
             )
 
         # Feed missed ads back to pattern service for learning
-        if self.sponsor_service and original_ads:
+        if self.pattern_service and original_ads:
             try:
-                self.sponsor_service.record_verification_misses(
+                self.pattern_service.record_verification_misses(
                     slug, episode_id, original_ads
                 )
             except Exception as e:
