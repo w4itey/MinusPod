@@ -6,6 +6,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.92] - 2026-04-06
+
+### Fixed
+- **LLM returning non-numeric timestamps/confidence**: Added explicit type instructions to both detection and verification prompts -- "start", "end", and "confidence" fields must be numeric floats, never strings like "high", "low", or "95%". Includes sample values in the schema line for clarity.
+
+## [1.0.91] - 2026-04-06
+
+### Fixed
+- **Verification miss NoneType crash**: `PatternService.record_verification_misses` crashed with `'NoneType' object has no attribute 'lower'` when a pattern had `sponsor: None`. Used `or ''` fallback instead of `.get()` default which doesn't cover explicit `None` values.
+
+## [1.0.90] - 2026-04-06
+
+### Fixed
+- **Episode multiselect broken (Issue #102)**: Individual episode checkboxes did not toggle because the wrapper div used `preventDefault()` which blocked the label from toggling its input. Changed to `stopPropagation()` to prevent navigation while allowing checkbox behavior.
+- **Verification miss recording failure**: `verification_pass.py` called `record_verification_misses()` on `SponsorService` which does not have that method. Fixed to use `PatternService` where the method actually lives.
+- **Pricing fetcher warning spam for private IPs**: Private IP addresses (RFC 1918 ranges like 192.168.x.x) used as transcription endpoints were not recognized as local providers, triggering a warning log every 15 minutes. Added private IP detection to treat them as free/local.
+
+### Added
+- **Copy feedback on mobile**: All copy-feed-URL buttons (dashboard cards, list items, feed detail page) now show a checkmark icon with "Copied!" text for 2 seconds after tapping, providing clear visual confirmation that the URL was copied.
+
 ## [1.0.89] - 2026-04-02
 
 ### Added

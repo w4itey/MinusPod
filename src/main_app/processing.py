@@ -439,7 +439,7 @@ def _run_verification_pass(slug, episode_id, processed_path, ads_to_remove,
     Returns (verification_count, v_ads_for_ui, processed_path).
     """
     from ad_validator import AdValidator
-    db, _, _, ad_detector, _, audio_analyzer, sponsor_service, _, _, _ = _get_components()
+    db, _, _, ad_detector, _, audio_analyzer, _, _, pattern_service, _ = _get_components()
     verification_count = 0
     v_ads_for_ui = []
 
@@ -448,7 +448,8 @@ def _run_verification_pass(slug, episode_id, processed_path, ads_to_remove,
         from main_app import transcriber, storage
         verifier = VerificationPass(
             ad_detector=ad_detector, transcriber=transcriber,
-            audio_analyzer=audio_analyzer, sponsor_service=sponsor_service, db=db,
+            audio_analyzer=audio_analyzer, pattern_service=pattern_service,
+            db=db,
         )
         verification_result = verifier.verify(
             processed_audio_path=processed_path,

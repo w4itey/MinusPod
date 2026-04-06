@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getFeed, getEpisodes, refreshFeed, updateFeed, getNetworks, reprocessAllEpisodes, ReprocessAllResult, bulkEpisodeAction, BulkAction } from '../api/feeds';
 import type { BulkActionResult } from '../api/types';
+import CopyButton from '../components/CopyButton';
 import EpisodeList from '../components/EpisodeList';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { formatStorage } from './settings/settingsUtils';
@@ -134,20 +135,6 @@ function FeedDetail() {
     });
   };
 
-  const copyFeedUrl = async () => {
-    if (feed?.feedUrl) {
-      try {
-        await navigator.clipboard.writeText(feed.feedUrl);
-      } catch {
-        const input = document.createElement('input');
-        input.value = feed.feedUrl;
-        document.body.appendChild(input);
-        input.select();
-        document.execCommand('copy');
-        document.body.removeChild(input);
-      }
-    }
-  };
 
   const handleToggleSelect = (id: string) => {
     setSelectedIds(prev => {
@@ -362,21 +349,13 @@ function FeedDetail() {
             <code className="hidden sm:block text-sm bg-secondary px-2 py-1 rounded truncate min-w-0">
               {feed.feedUrl}
             </code>
-            <button
-              onClick={copyFeedUrl}
-              className="px-4 py-2 sm:px-0 sm:py-0 sm:p-1.5 rounded flex items-center gap-2 bg-secondary sm:bg-transparent text-secondary-foreground sm:text-muted-foreground hover:bg-secondary/80 sm:hover:bg-accent hover:text-foreground transition-colors"
-              title="Copy feed URL"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                />
-              </svg>
-              <span className="text-sm">Copy Feed URL</span>
-            </button>
+            <CopyButton
+              text={feed.feedUrl}
+              label="Copy Feed URL"
+              className="px-4 py-2 sm:px-0 sm:py-0 sm:p-1.5 gap-2 bg-secondary sm:bg-transparent text-secondary-foreground sm:text-muted-foreground hover:bg-secondary/80 sm:hover:bg-accent"
+              copiedClassName="text-green-500 bg-green-500/10 sm:bg-transparent"
+              labelClassName="text-sm"
+            />
           </div>
           <div className="flex gap-2">
             {/* Reprocess Dropdown */}
