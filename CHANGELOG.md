@@ -6,6 +6,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.92] - 2026-04-06
+
+### Fixed
+- **LLM returning non-numeric timestamps/confidence**: Added explicit type instructions to both detection and verification prompts -- "start", "end", and "confidence" fields must be numeric floats, never strings like "high", "low", or "95%". Includes sample values in the schema line for clarity.
+
 ## [1.0.91] - 2026-04-06
 
 ### Fixed
