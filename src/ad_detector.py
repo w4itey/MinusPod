@@ -22,7 +22,8 @@ from config import (
     MAX_AD_DURATION_WINDOW, WINDOW_SIZE_SECONDS, WINDOW_OVERLAP_SECONDS,
     BOUNDARY_EXTENSION_WINDOW, BOUNDARY_EXTENSION_MAX,
     AD_CONTENT_URL_PATTERNS, AD_CONTENT_PROMO_PHRASES,
-    LOW_CONFIDENCE, CONTENT_DURATION_THRESHOLD, LOW_EVIDENCE_WARN_THRESHOLD,
+    LOW_CONFIDENCE, CONFIDENCE_STRING_MAP,
+    CONTENT_DURATION_THRESHOLD, LOW_EVIDENCE_WARN_THRESHOLD,
     MIN_KEYWORD_LENGTH, MIN_UNCOVERED_TAIL_DURATION,
     PATTERN_CORRECTION_OVERLAP_THRESHOLD,
     DEFAULT_AD_DETECTION_MODEL,
@@ -1549,8 +1550,15 @@ class AdDetector:
                                         reason = description
 
                                 # Normalize confidence to 0-1 range
-                                # Claude sometimes returns percentage (0-100) instead of fraction (0-1)
-                                raw_conf = float(ad.get('confidence', 0.8))
+                                raw_conf = ad.get('confidence', 0.8)
+                                if isinstance(raw_conf, str):
+                                    mapped = CONFIDENCE_STRING_MAP.get(raw_conf.lower().strip())
+                                    if mapped is not None:
+                                        logger.debug(f"[{slug}:{episode_id}] Mapped string confidence '{raw_conf}' -> {mapped}")
+                                        raw_conf = mapped
+                                    else:
+                                        raw_conf = raw_conf.rstrip('%')
+                                raw_conf = float(raw_conf)
                                 norm_conf = raw_conf / 100.0 if raw_conf > 1.0 else raw_conf
                                 norm_conf = min(1.0, max(0.0, norm_conf))
 
