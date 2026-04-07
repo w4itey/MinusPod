@@ -379,6 +379,26 @@ class EpisodeMixin:
         row = cursor.fetchone()
         return row['original_transcript_text'] if row else None
 
+    def get_transcript_for_timestamps(self, slug: str, episode_id: str) -> str:
+        """Get the best transcript for timestamp-based extraction.
+
+        Prefers original (pre-cut) transcript so ad timestamps align with actual
+        content. Falls back to edited transcript for episodes processed before
+        original transcript storage was added (v1.0.51).
+        """
+        conn = self.get_connection()
+        cursor = conn.execute(
+            """SELECT COALESCE(ed.original_transcript_text, ed.transcript_text)
+                      AS transcript
+               FROM episode_details ed
+               JOIN episodes e ON ed.episode_id = e.id
+               JOIN podcasts p ON e.podcast_id = p.id
+               WHERE p.slug = ? AND e.episode_id = ?""",
+            (slug, episode_id)
+        )
+        row = cursor.fetchone()
+        return row['transcript'] if row else None
+
     def save_episode_audio_analysis(self, slug: str, episode_id: str, audio_analysis_json: str):
         """Save audio analysis results for an episode."""
         conn = self.get_connection()

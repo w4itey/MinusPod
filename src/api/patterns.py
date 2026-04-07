@@ -435,11 +435,8 @@ def submit_correction(slug, episode_id):
             pattern_service.record_pattern_match(pattern_id, episode_id)
         else:
             # Create new pattern from Claude detection
-            episode = db.get_episode(slug, episode_id)
-            if episode:
-                transcript = episode.get('transcript_text', '')
-
-                # Extract ad text from transcript using timestamps
+            transcript = db.get_transcript_for_timestamps(slug, episode_id)
+            if transcript:
                 ad_text = extract_transcript_segment(transcript, original_start, original_end)
 
                 if ad_text and len(ad_text) >= 50:  # Minimum for TF-IDF matching
@@ -501,13 +498,11 @@ def submit_correction(slug, episode_id):
 
         # Extract transcript text for cross-episode matching
         rejected_text = None
-        episode = db.get_episode(slug, episode_id)
-        if episode:
-            transcript = episode.get('transcript_text', '')
-            if transcript:
-                rejected_text = extract_transcript_segment(transcript, original_start, original_end)
-                if rejected_text:
-                    logger.debug(f"Extracted {len(rejected_text)} chars of rejected text for cross-episode matching")
+        transcript = db.get_transcript_for_timestamps(slug, episode_id)
+        if transcript:
+            rejected_text = extract_transcript_segment(transcript, original_start, original_end)
+            if rejected_text:
+                logger.debug(f"Extracted {len(rejected_text)} chars of rejected text for cross-episode matching")
 
         # Mark as false positive
         if pattern_id:
@@ -545,11 +540,9 @@ def submit_correction(slug, episode_id):
 
         # Extract transcript text using ADJUSTED boundaries for pattern learning
         adjusted_text = None
-        episode = db.get_episode(slug, episode_id)
-        if episode:
-            transcript = episode.get('transcript_text', '')
-            if transcript:
-                adjusted_text = extract_transcript_segment(transcript, adjusted_start, adjusted_end)
+        transcript = db.get_transcript_for_timestamps(slug, episode_id)
+        if transcript:
+            adjusted_text = extract_transcript_segment(transcript, adjusted_start, adjusted_end)
 
         # If we have a pattern, increment confirmation count
         if pattern_id:
@@ -787,9 +780,8 @@ def backfill_false_positive_texts():
     updated = 0
     skipped = 0
     for row in rows:
-        # Get episode transcript
-        episode = db.get_episode(row['slug'], row['episode_id'])
-        if not episode or not episode.get('transcript_text'):
+        transcript = db.get_transcript_for_timestamps(row['slug'], row['episode_id'])
+        if not transcript:
             skipped += 1
             continue
 
@@ -806,7 +798,7 @@ def backfill_false_positive_texts():
                 continue
 
             # Extract text
-            text = extract_transcript_segment(episode['transcript_text'], start, end)
+            text = extract_transcript_segment(transcript, start, end)
             if text and len(text) >= 50:
                 conn.execute(
                     'UPDATE pattern_corrections SET text_snippet = ? WHERE id = ?',
