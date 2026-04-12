@@ -100,12 +100,12 @@ def _lookup_episode(slug, episode_id, feed_map, episode_row=None):
 def _head_upstream(slug, episode_id, original_url):
     """Proxy a HEAD request to the upstream audio URL."""
     try:
-        validate_url(original_url)
+        safe_url = validate_url(original_url)
     except SSRFError as e:
         feed_logger.warning(f"[{slug}:{episode_id}] SSRF blocked in HEAD upstream: {e}")
         abort(502)
     try:
-        resp = requests.head(original_url, timeout=10, allow_redirects=True,
+        resp = requests.head(safe_url, timeout=10, allow_redirects=True,
                              headers={'User-Agent': APP_USER_AGENT})
         if resp.status_code == 200:
             proxy_resp = Response('', status=200)

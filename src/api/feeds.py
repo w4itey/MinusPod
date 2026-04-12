@@ -154,7 +154,7 @@ def add_feed():
 
     except Exception as e:
         logger.error(f"Failed to add feed: {e}")
-        return error_response(f'Failed to add feed: {str(e)}', 500)
+        return error_response('Failed to add feed', 500, details=str(e))
 
 
 @api.route('/feeds/import-opml', methods=['POST'])
@@ -453,7 +453,7 @@ def update_feed(slug):
         })
     except Exception as e:
         logger.error(f"Failed to update feed {slug}: {e}")
-        return error_response(f'Failed to update feed: {str(e)}', 500)
+        return error_response('Failed to update feed', 500, details=str(e))
 
 
 @api.route('/feeds/<slug>', methods=['DELETE'])
@@ -483,7 +483,7 @@ def delete_feed(slug):
 
     except Exception as e:
         logger.error(f"Failed to delete feed {slug}: {e}")
-        return error_response(f'Failed to delete feed: {str(e)}', 500)
+        return error_response('Failed to delete feed', 500, details=str(e))
 
 
 @api.route('/feeds/<slug>/refresh', methods=['POST'])
@@ -533,7 +533,7 @@ def refresh_feed(slug):
 
     except Exception as e:
         logger.error(f"Failed to refresh feed {slug}: {e}")
-        return error_response(f'Failed to refresh feed: {str(e)}', 500)
+        return error_response('Failed to refresh feed', 500, details=str(e))
 
 
 @api.route('/feeds/refresh', methods=['POST'])
@@ -572,7 +572,7 @@ def refresh_all_feeds():
 
     except Exception as e:
         logger.error(f"Failed to refresh all feeds: {e}")
-        return error_response(f'Failed to refresh feeds: {str(e)}', 500)
+        return error_response('Failed to refresh feeds', 500, details=str(e))
 
 
 def _extract_artwork_url_from_feed(source_url: str) -> Optional[str]:

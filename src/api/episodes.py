@@ -291,7 +291,7 @@ def reprocess_episode(slug, episode_id):
 
     except Exception as e:
         logger.error(f"Failed to reprocess episode {slug}:{episode_id}: {e}")
-        return error_response(f'Failed to reprocess: {str(e)}', 500)
+        return error_response('Failed to reprocess', 500, details=str(e))
 
 
 @api.route('/feeds/<slug>/episodes/<episode_id>/regenerate-chapters', methods=['POST'])
@@ -364,7 +364,7 @@ def regenerate_chapters(slug, episode_id):
 
     except Exception as e:
         logger.error(f"Failed to regenerate chapters for {slug}:{episode_id}: {e}")
-        return error_response(f'Failed to regenerate chapters: {str(e)}', 500)
+        return error_response('Failed to regenerate chapters', 500, details=str(e))
 
 
 def _parse_vtt_to_segments(vtt_content: str) -> list:
@@ -665,7 +665,7 @@ def retry_ad_detection(slug, episode_id):
 
     except Exception as e:
         logger.error(f"Failed to retry ad detection for {slug}:{episode_id}: {e}")
-        return error_response(f'Failed to retry ad detection: {str(e)}', 500)
+        return error_response('Failed to retry ad detection', 500, details=str(e))
 
 
 # ========== Processing Queue Endpoints ==========
@@ -828,4 +828,4 @@ def reprocess_episode_with_mode(slug, episode_id):
 
     except Exception as e:
         logger.error(f"[{slug}:{episode_id}] {mode} reprocess failed: {e}")
-        return error_response(f'Reprocess failed: {str(e)}', 500)
+        return error_response('Reprocess failed', 500, details=str(e))

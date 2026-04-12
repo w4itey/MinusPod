@@ -309,7 +309,7 @@ def deduplicate_patterns():
         })
     except Exception as e:
         logger.error(f"Deduplication failed: {e}")
-        return error_response(f'Deduplication failed: {str(e)}', 500)
+        return error_response('Deduplication failed', 500, details=str(e))
 
 
 @api.route('/patterns/merge', methods=['POST'])
@@ -392,7 +392,7 @@ def merge_patterns():
         })
     except Exception as e:
         logger.error(f"Pattern merge failed: {e}")
-        return error_response(f'Merge failed: {str(e)}', 500)
+        return error_response('Merge failed', 500, details=str(e))
 
 
 @api.route('/episodes/<slug>/<episode_id>/corrections', methods=['POST'])
@@ -750,7 +750,7 @@ def import_patterns():
 
     except Exception as e:
         logger.error(f"Import failed: {e}")
-        return error_response(f'Import failed: {str(e)}', 500)
+        return error_response('Import failed', 500, details=str(e))
 
 
 @api.route('/patterns/backfill-false-positives', methods=['POST'])

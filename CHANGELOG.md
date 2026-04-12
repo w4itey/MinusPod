@@ -6,6 +6,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] - 2026-04-12
+
+### Security
+- Close CodeQL #5 (py/stack-trace-exposure): stop interpolating `str(e)` into the user-facing `message` arg of `error_response` for 5xx paths. Exception details now flow through `details=`, which `error_response` already strips from the client payload and logs server-side. Refactored 13 call sites across `api/episodes.py`, `api/system.py`, `api/feeds.py`, `api/patterns.py`.
+- Close CodeQL #14 (py/full-ssrf) in `_head_upstream` by binding `validate_url()`'s return value to a new variable used in the subsequent `requests.head()` call, so CodeQL recognizes the sanitized flow.
+
 ## [1.1.1] - 2026-04-12
 
 ### Changed
