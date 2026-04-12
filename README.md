@@ -788,6 +788,77 @@ Custom payload templates are Jinja2 strings rendered against these variables:
 | `error_message` | string | Error details from the provider |
 | `status_code` | int/null | HTTP status code (401 or 403) |
 
+### Default Payloads
+
+When no custom template is configured, MinusPod sends these JSON payloads.
+
+**Episode Processed:**
+
+```json
+{
+  "event": "Episode Processed",
+  "timestamp": "2026-04-12T00:15:42Z",
+  "podcast": {
+    "name": "My Favorite Podcast",
+    "slug": "my-favorite-podcast"
+  },
+  "episode": {
+    "id": "a1b2c3d4e5f6",
+    "title": "Episode 42: The Answer",
+    "slug": "my-favorite-podcast",
+    "url": "http://your-server:8000/ui/feeds/my-favorite-podcast/episodes/a1b2c3d4e5f6",
+    "ads_removed": 3,
+    "processing_time_secs": 42.5,
+    "processing_time": "0:42",
+    "llm_cost": 0.0035,
+    "llm_cost_display": "$0.00",
+    "time_saved_secs": 187.0,
+    "time_saved": "3:07",
+    "error_message": null
+  }
+}
+```
+
+**Episode Failed:**
+
+```json
+{
+  "event": "Episode Failed",
+  "timestamp": "2026-04-12T00:15:42Z",
+  "podcast": {
+    "name": "My Favorite Podcast",
+    "slug": "my-favorite-podcast"
+  },
+  "episode": {
+    "id": "a1b2c3d4e5f6",
+    "title": "Episode 42: The Answer",
+    "slug": "my-favorite-podcast",
+    "url": "http://your-server:8000/ui/feeds/my-favorite-podcast/episodes/a1b2c3d4e5f6",
+    "ads_removed": 0,
+    "processing_time_secs": 12.3,
+    "processing_time": "0:12",
+    "llm_cost": 0.001,
+    "llm_cost_display": "$0.00",
+    "time_saved_secs": null,
+    "time_saved": null,
+    "error_message": "Transcription failed: audio file is corrupt or unsupported format"
+  }
+}
+```
+
+**Auth Failure:**
+
+```json
+{
+  "event": "Auth Failure",
+  "timestamp": "2026-04-12T00:15:42Z",
+  "provider": "anthropic",
+  "model": "claude-sonnet-4-20250514",
+  "error_message": "Invalid API key provided",
+  "status_code": 401
+}
+```
+
 ### Example: Pushover
 
 Pushover supports native webhook ingestion with data extraction selectors. No custom payload template needed -- MinusPod's default JSON payload works directly.
@@ -828,8 +899,6 @@ ntfy requires a custom payload template to match its expected JSON format.
      ```
 
 > ntfy also supports header-based delivery (`X-Title`, `X-Message`, `X-Click` headers with plain text body) -- either approach works with MinusPod's template system.
-
-When no custom template is configured, MinusPod sends its default JSON payload which works with custom scripts, n8n, Home Assistant webhooks, and other generic HTTP receivers.
 
 ### Request Signing
 
