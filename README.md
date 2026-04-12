@@ -2,7 +2,7 @@
   <img src="frontend/public/logo.png" alt="MinusPod" width="400" />
 </p>
 
-Removes ads from podcasts using Whisper transcription. Serves modified RSS feeds that work with any podcast app.
+MinusPod is a self-hosted server that removes ads before you ever hit play. It transcribes episodes with Whisper, uses an LLM to detect and cut ad segments, and gets smarter over time by building cross-episode ad patterns and learning from your corrections. Bring your own LLM -- Claude, Ollama, OpenRouter, or any OpenAI-compatible provider.
 
 ## Table of Contents
 
@@ -13,6 +13,7 @@ Removes ads from podcasts using Whisper transcription. Serves modified RSS feeds
 - [Web Interface](#web-interface)
   - [Ad Editor Workflow](#ad-editor-workflow)
   - [Screenshots](#screenshots)
+  - [Stats](#stats)
 - [Configuration](#configuration)
 - [Finding Podcast RSS Feeds](#finding-podcast-rss-feeds)
 - [Usage](#usage)
@@ -33,11 +34,11 @@ Removes ads from podcasts using Whisper transcription. Serves modified RSS feeds
 ## How It Works
 
 1. **Transcription** - Whisper converts audio to text with timestamps (local GPU via faster-whisper, or remote API via OpenAI-compatible endpoint)
-2. **Ad Detection** - Claude API analyzes transcript to identify ad segments (with optional dual-pass detection)
+2. **Ad Detection** - An LLM analyzes the transcript to identify ad segments, with an automatic verification pass
 3. **Audio Processing** - FFmpeg removes detected ads and inserts short audio markers
 4. **Serving** - Flask serves modified RSS feeds and processed audio files
 
-Processing happens on-demand when you play an episode. First play takes a few minutes, subsequent plays are instant (cached).
+Processing happens on-demand when you play an episode, or automatically when new episodes appear. First play takes a few minutes, subsequent plays are instant (cached).
 
 ## Advanced Features (Quick Reference)
 
@@ -56,12 +57,12 @@ After the first pass detects and removes ads, a verification pipeline runs on th
 
 1. **Re-transcribe** - The processed audio is re-transcribed on CPU using Whisper
 2. **Audio Analysis** - Volume analysis and transition detection run on the processed audio
-3. **Claude Detection** - A "what doesn't belong" prompt detects any remaining ad content
+3. **LLM Detection** - A "what doesn't belong" prompt detects any remaining ad content
 4. **Audio Enforcement** - Programmatic signal matching validates and extends detections
 5. **Re-cut** - If missed ads are found, the pass 1 output is re-cut directly
 
 Each detected ad shows a badge indicating which stage found it:
-- **First Pass** (blue) - Found by Claude's first pass
+- **First Pass** (blue) - Found during first pass detection
 - **Audio Enforced** (orange) - Found by programmatic audio signal matching
 - **Verification** (purple) - Found by the post-cut verification pass
 
@@ -97,8 +98,8 @@ HEAD requests (sent by podcast apps like Pocket Casts during feed refresh) proxy
 
 After ad detection, a validation layer reviews each detection before audio processing:
 
-- **Duration checks** - Rejects ads shorter than 7s or longer than 5 minutes
-- **Confidence thresholds** - Rejects very low confidence detections (<0.3); only cuts ads with >=80% adjusted confidence
+- **Duration checks** - Rejects ads outside configurable duration limits
+- **Confidence thresholds** - Rejects very low confidence detections; only cuts ads above the minimum confidence threshold (adjustable in Settings)
 - **Position heuristics** - Boosts confidence for typical ad positions (pre-roll, mid-roll, post-roll)
 - **Transcript verification** - Checks for sponsor names and ad signals in the transcript
 - **Auto-correction** - Merges ads with tiny gaps, clamps boundaries to valid range
@@ -119,12 +120,12 @@ When an ad is detected and validated, text patterns are extracted and stored for
 - **Network Patterns** - Match within a podcast network (TWiT, Relay FM, Gimlet, etc.)
 - **Podcast Patterns** - Match only for a specific podcast
 
-When processing new episodes, the system first checks for known patterns before sending to Claude. Patterns with high confirmation counts and low false positive rates are matched with high confidence.
+When processing new episodes, the system first checks for known patterns before sending to the LLM. Patterns with high confirmation counts and low false positive rates are matched with high confidence.
 
 **Pattern Sources:**
 - **Audio Fingerprinting** - Identifies DAI-inserted ads using Chromaprint acoustic fingerprints
 - **Text Pattern Matching** - TF-IDF similarity and fuzzy matching against learned patterns
-- **Claude Analysis** - Falls back to AI analysis for uncovered segments
+- **LLM Analysis** - Falls back to AI analysis for uncovered segments
 
 **User Corrections:**
 In the ad editor, you can confirm, reject, or adjust detected ads:
@@ -147,8 +148,8 @@ A global status bar shows real-time processing progress via Server-Sent Events. 
 
 When reprocessing an episode from the UI, two modes are available:
 
-- Reprocess (default) -- uses learned patterns from the pattern database plus Claude analysis
-- Full Analysis -- skips the pattern database entirely for a fresh Claude-only analysis
+- Reprocess (default) -- uses learned patterns from the pattern database plus LLM analysis
+- Full Analysis -- skips the pattern database entirely for a fresh LLM-only analysis
 
 Full Analysis is useful when you want to re-evaluate an episode without learned patterns (e.g., after disabling patterns that caused false positives).
 
@@ -158,12 +159,12 @@ Audio analysis runs automatically on every episode (lightweight, uses only ffmpe
 
 - **Volume Analysis** - Detects loudness anomalies using EBU R128 measurement. Identifies sections mastered at different levels than the content baseline.
 - **Transition Detection** - Finds abrupt frame-to-frame loudness jumps that indicate dynamically inserted ad (DAI) boundaries. Pairs up/down transitions into candidate ad regions.
-- **Audio Enforcement** - After Claude detection, uncovered audio signals with ad language in the transcript are promoted to ads. DAI transitions with high confidence (>=0.8) or sponsor matches are also promoted. Existing ad boundaries are extended when signals partially overlap.
+- **Audio Enforcement** - After LLM detection, uncovered audio signals with ad language in the transcript are promoted to ads. DAI transitions with high confidence (>=0.8) or sponsor matches are also promoted. Existing ad boundaries are extended when signals partially overlap.
 
 ## Requirements
 
 - Docker with NVIDIA GPU support (for local Whisper), **or** a [remote Whisper backend](#remote-whisper-transcription) (no GPU needed)
-- Anthropic API key, [OpenRouter](https://openrouter.ai) API key, **or** [Ollama](https://ollama.com) for local inference
+- Anthropic API key, [OpenRouter](https://openrouter.ai) API key, [Ollama](https://ollama.com) for local inference, **or** any OpenAI-compatible endpoint
 
 ### Memory Requirements
 
@@ -176,6 +177,7 @@ Audio analysis runs automatically on every episode (lightweight, uses only ffmpe
 | small | ~2 GB |
 | medium | ~4 GB |
 | large-v3 | ~5-6 GB |
+| turbo | ~5 GB |
 
 **System RAM:**
 
@@ -193,6 +195,7 @@ Audio analysis runs automatically on every episode (lightweight, uses only ffmpe
 cat > .env << EOF
 ANTHROPIC_API_KEY=your-key-here
 BASE_URL=http://localhost:8000
+APP_PASSWORD=your-password
 EOF
 
 # 2. Create data directory
@@ -220,6 +223,8 @@ The server includes a web-based management UI at `/ui/`:
 - Settings for LLM provider, AI models, ad detection prompts, retention, system stats, token usage and cost
 - Real-time status bar showing processing progress across all pages
 - OPML export with original or ad-free (modified) feed URLs
+- Per-feed auto-process control (enable, disable, or use global default)
+- Webhook notifications for processed episodes and auth failures
 - Podcast search via PodcastIndex.org
 - Multiple dark themes (Tokyo Night, Dracula, Catppuccin, Nord, Gruvbox, Solarized, and more) with light/dark toggle
 - Installable as Progressive Web App (PWA)
@@ -305,10 +310,11 @@ All configuration is managed through the web UI or REST API. No config files nee
 ### Ad Detection Settings
 
 Customize ad detection in Settings:
-- **LLM Provider** - Switch between Anthropic (direct API), Ollama (local), or OpenAI-compatible endpoints at runtime without restarting the container
+- **LLM Provider** - Switch between Anthropic (direct API), OpenRouter, Ollama (local), or OpenAI-compatible endpoints at runtime without restarting the container
 - **AI Model** - Model for first pass ad detection
 - **Verification Model** - Separate model for the post-cut verification pass
-- **Chapters Model** - Model for chapter generation (defaults to Haiku for cost efficiency)
+- **Chapters Model** - Model for chapter generation (a small model like Haiku works well here)
+- **Audio Bitrate** - Output bitrate for processed audio (default 128k)
 - **System Prompts** - Customizable prompts for first pass and verification detection
 
 ## Finding Podcast RSS Feeds
@@ -364,7 +370,12 @@ This is a comma-separated list of domains excluded from Audiobookshelf's SSRF fi
 | `WHISPER_API_MODEL` | `whisper-1` | Model name sent to whisper API |
 | `RETENTION_PERIOD` | `1440` | **Deprecated.** Legacy minutes-based retention (auto-converted to days on first startup). Use the Settings UI or `PUT /api/v1/settings/retention` instead. Retention now resets episodes to "discovered" instead of deleting them. |
 | `AD_DETECTION_MAX_TOKENS` | `2000` | Maximum tokens for LLM ad detection responses (increase if responses are being truncated) |
-| `TUNNEL_TOKEN` | optional | Cloudflare tunnel token for remote access |
+| `APP_PASSWORD` | _(none)_ | Initial password for web UI (can also be set in Settings > Security) |
+| `LOG_LEVEL` | `INFO` | Logging level (DEBUG, INFO, WARNING, ERROR) |
+| `DATA_DIR` | `/app/data` | Data storage directory |
+| `PODCAST_INDEX_API_KEY` | _(none)_ | PodcastIndex.org API key for podcast search (or configure in Settings) |
+| `PODCAST_INDEX_API_SECRET` | _(none)_ | PodcastIndex.org API secret |
+| `TUNNEL_TOKEN` | _(none)_ | Cloudflare tunnel token for remote access |
 
 ### Using Claude Code Wrapper (Max Subscription)
 
@@ -414,7 +425,7 @@ Note: The AI model is configured via the Settings UI, not environment variables.
 
 ## Using Ollama (Local LLM)
 
-MinusPod supports [Ollama](https://ollama.com) as a drop-in replacement for the Anthropic API. This lets you run ad detection entirely locally with no API costs or data leaving your machine.
+MinusPod supports [Ollama](https://ollama.com) as an alternative to the Anthropic API. This lets you run ad detection entirely locally with no API costs or data leaving your machine.
 
 ### Setup
 
@@ -465,7 +476,7 @@ Easier task. Looks for remnants in already-cut audio. Speed matters more than ra
 
 #### Chapters
 
-Simplest task. Summarization only -- no structured detection. Minimize cost and latency.
+Simplest task. Summarization only -- no structured detection. Minimize VRAM usage and latency.
 
 | VRAM | Model | Quantization | Notes |
 |------|-------|--------------|-------|
@@ -684,9 +695,10 @@ Pricing data comes from third-party sources and may lag behind provider announce
 
 ## API
 
-REST API available at `/api/v1/`. Interactive docs at `/docs`. See `openapi.yaml` for full specification.
+REST API available at `/api/v1/`. Interactive docs at `/docs`. Full specification: [`openapi.yaml`](openapi.yaml).
 
 Key endpoints:
+- `GET /api/v1/health` - Health check (database, storage, queue status)
 - `GET /api/v1/feeds` - List all feeds
 - `POST /api/v1/feeds` - Add a new feed (supports `maxEpisodes` for RSS cap)
 - `POST /api/v1/feeds/import-opml` - Import feeds from OPML file
@@ -694,7 +706,10 @@ Key endpoints:
 - `GET /api/v1/podcast-search?q=query` - Search podcasts via PodcastIndex.org
 - `GET /api/v1/feeds/{slug}/episodes` - List episodes (supports `sort_by`, `sort_dir`, `status` filter, pagination)
 - `POST /api/v1/feeds/{slug}/episodes/bulk` - Bulk episode actions (process, reprocess, reprocess_full, delete)
+- `GET /api/v1/feeds/{slug}/episodes/{id}` - Get episode detail with ad markers and transcript
 - `POST /api/v1/feeds/{slug}/episodes/{id}/reprocess` - Force reprocess (supports `mode`: reprocess/full)
+- `POST /api/v1/feeds/{slug}/episodes/{id}/cancel` - Cancel processing for a stuck episode
+- `POST /api/v1/feeds/{slug}/episodes/{id}/regenerate-chapters` - Regenerate chapter markers
 - `POST /api/v1/feeds/{slug}/reprocess-all` - Batch reprocess all episodes
 - `POST /api/v1/feeds/{slug}/episodes/{id}/retry-ad-detection` - Retry ad detection only
 - `POST /api/v1/feeds/{slug}/episodes/{id}/corrections` - Submit ad corrections
@@ -702,6 +717,7 @@ Key endpoints:
 - `GET /api/v1/patterns/stats` - Pattern database statistics
 - `GET /api/v1/sponsors` - List/create/update/delete sponsors (full CRUD)
 - `GET /api/v1/search?q=query` - Full-text search across all content
+- `GET /api/v1/episodes/processing` - List episodes currently processing
 - `GET /api/v1/history` - Processing history with pagination and export
 - `GET /api/v1/stats/dashboard` - Aggregate stats (avg/min/max time saved, ads, cost, tokens) with optional podcast filter
 - `GET /api/v1/stats/by-day` - Episodes processed by day of week
@@ -711,6 +727,7 @@ Key endpoints:
 - `GET /api/v1/system/token-usage` - LLM token usage and cost breakdown by model
 - `GET /api/v1/system/model-pricing` - All known LLM model pricing rates
 - `POST /api/v1/system/model-pricing/refresh` - Force refresh pricing from provider source
+- `GET /api/v1/system/queue` - Auto-process queue status
 - `POST /api/v1/system/vacuum` - Trigger SQLite VACUUM to reclaim disk space
 - `GET /api/v1/system/backup` - Download SQLite database backup
 - `GET /api/v1/settings` - Get current settings (includes LLM provider, API key status)
@@ -724,7 +741,7 @@ Key endpoints:
 
 ## Webhooks
 
-MinusPod fires an HTTP POST to configured URLs when episodes complete processing or permanently fail. Works with any HTTP endpoint. Use a custom Jinja2 payload template to match the receiver's expected format.
+MinusPod fires an HTTP POST to configured URLs when episodes complete processing, permanently fail, or when LLM authentication fails. Works with any HTTP endpoint. Use a custom Jinja2 payload template to match the receiver's expected format.
 
 Configure webhooks in **Settings > Webhooks** in the web UI, or via the REST API.
 
@@ -759,6 +776,17 @@ Custom payload templates are Jinja2 strings rendered against these variables:
 | `episode.time_saved` | string/null | Time saved formatted as M:SS or H:MM:SS |
 | `episode.error_message` | string/null | Error message (failed events only) |
 | `test` | bool | `true` only on test webhook fires; absent on real events |
+
+**Auth Failure events use a different payload:**
+
+| Variable | Type | Description |
+|---|---|---|
+| `event` | string | `Auth Failure` |
+| `timestamp` | string | ISO 8601 UTC timestamp |
+| `provider` | string | LLM provider name (anthropic, openrouter, etc.) |
+| `model` | string | Model that failed authentication |
+| `error_message` | string | Error details from the provider |
+| `status_code` | int/null | HTTP status code (401 or 403) |
 
 ### Example: Pushover
 
