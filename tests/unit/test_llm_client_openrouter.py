@@ -30,6 +30,27 @@ class TestGetEffectiveOpenrouterApiKey(unittest.TestCase):
         self.assertEqual(get_effective_openrouter_api_key(), 'sk-or-db-key')
 
 
+class TestGetEffectiveOllamaApiKey(unittest.TestCase):
+    """Verify DB-first, env-fallback logic for Ollama API key."""
+
+    @patch('llm_client._get_cached_secret', return_value='ollama-db-key')
+    def test_returns_db_value_when_set(self, _mock):
+        from llm_client import get_effective_ollama_api_key
+        self.assertEqual(get_effective_ollama_api_key(), 'ollama-db-key')
+
+    @patch('llm_client._get_cached_secret', return_value=None)
+    @patch.dict('os.environ', {'OLLAMA_API_KEY': 'ollama-env-key'})
+    def test_falls_back_to_env_var(self, _mock):
+        from llm_client import get_effective_ollama_api_key
+        self.assertEqual(get_effective_ollama_api_key(), 'ollama-env-key')
+
+    @patch('llm_client._get_cached_secret', return_value=None)
+    @patch.dict('os.environ', {}, clear=True)
+    def test_returns_none_when_unset(self, _mock):
+        from llm_client import get_effective_ollama_api_key
+        self.assertIsNone(get_effective_ollama_api_key())
+
+
 class TestGetLlmTimeoutOpenRouter(unittest.TestCase):
     """Verify OpenRouter gets the fast cloud timeout, not the local timeout."""
 

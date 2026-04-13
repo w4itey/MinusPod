@@ -243,6 +243,15 @@ def get_effective_openai_api_key() -> Optional[str]:
     return os.environ.get('OPENAI_API_KEY', os.environ.get('ANTHROPIC_API_KEY', 'not-needed'))
 
 
+def get_effective_ollama_api_key() -> Optional[str]:
+    """Return the Ollama API key, DB first then env var. Empty when neither is set
+    (local Ollama doesn't require auth; Cloud does)."""
+    db_val = _get_cached_secret('ollama_api_key')
+    if db_val:
+        return db_val
+    return os.environ.get('OLLAMA_API_KEY')
+
+
 class LLMClient(ABC):
     """Abstract base class for LLM clients."""
 
@@ -945,10 +954,14 @@ def _build_client(provider: str) -> Optional[LLMClient]:
         )
     elif provider in PROVIDERS_NON_ANTHROPIC:
         base_url = get_effective_base_url()
-        if provider == PROVIDER_OLLAMA and not base_url.rstrip('/').endswith('/v1'):
-            base_url = base_url.rstrip('/') + '/v1'
-            logger.info(f"Ollama provider: normalized base_url to {base_url}")
-        return OpenAICompatibleClient(base_url=base_url)
+        if provider == PROVIDER_OLLAMA:
+            if not base_url.rstrip('/').endswith('/v1'):
+                base_url = base_url.rstrip('/') + '/v1'
+                logger.info(f"Ollama provider: normalized base_url to {base_url}")
+            api_key = get_effective_ollama_api_key() or 'not-needed'
+        else:
+            api_key = get_effective_openai_api_key()
+        return OpenAICompatibleClient(base_url=base_url, api_key=api_key)
     return None
 
 
@@ -983,6 +996,8 @@ def get_api_key() -> Optional[str]:
         return get_effective_anthropic_api_key()
     elif provider == PROVIDER_OPENROUTER:
         return get_effective_openrouter_api_key()
+    elif provider == PROVIDER_OLLAMA:
+        return get_effective_ollama_api_key() or 'not-needed'
     else:
         return get_effective_openai_api_key()
 

@@ -21,6 +21,7 @@ _PROVIDERS = {
     'openai':     {'secret': 'openai_api_key',     'base_url': 'openai_base_url',     'base_env': 'OPENAI_BASE_URL',    'model': None,                'env': 'OPENAI_API_KEY'},
     'openrouter': {'secret': 'openrouter_api_key', 'base_url': None,                  'base_env': None,                 'model': None,                'env': 'OPENROUTER_API_KEY'},
     'whisper':    {'secret': 'whisper_api_key',    'base_url': 'whisper_api_base_url','base_env': 'WHISPER_API_BASE_URL','model': 'whisper_api_model', 'env': 'WHISPER_API_KEY'},
+    'ollama':     {'secret': 'ollama_api_key',     'base_url': 'openai_base_url',     'base_env': 'OPENAI_BASE_URL',    'model': None,                'env': 'OLLAMA_API_KEY'},
 }
 
 

@@ -384,6 +384,7 @@ This is a comma-separated list of domains excluded from Audiobookshelf's SSRF fi
 | `RETENTION_PERIOD` | `1440` | **Deprecated.** Legacy minutes-based retention (auto-converted to days on first startup). Use the Settings UI or `PUT /api/v1/settings/retention` instead. Retention now resets episodes to "discovered" instead of deleting them. |
 | `AD_DETECTION_MAX_TOKENS` | `2000` | Maximum tokens for LLM ad detection responses (increase if responses are being truncated) |
 | `APP_PASSWORD` | _(none)_ | Initial password for web UI (can also be set in Settings > Security) |
+| `OLLAMA_API_KEY` | _(none)_ | API key for Ollama Cloud (`https://ollama.com/api`). Leave unset when running against a local Ollama server. Also accepted via Settings > LLM Provider > API key (encrypted). |
 | `MINUSPOD_MASTER_PASSPHRASE` | _(none)_ | Unlocks the encrypted provider-key store (Settings > LLM Provider, Settings > Transcription). When unset the key inputs show "Setup required" and only env-var credentials are used. Keep it stable; losing it makes stored keys unreadable (env fallback still works). |
 | `LOG_LEVEL` | `INFO` | Logging level (DEBUG, INFO, WARNING, ERROR) |
 | `DATA_DIR` | `/app/data` | Data storage directory |
@@ -437,9 +438,14 @@ BASE_URL=http://localhost:8000
 
 Note: The AI model is configured via the Settings UI, not environment variables.
 
-## Using Ollama (Local LLM)
+## Using Ollama (Local or Cloud)
 
-MinusPod supports [Ollama](https://ollama.com) as an alternative to the Anthropic API. This lets you run ad detection entirely locally with no API costs or data leaving your machine.
+MinusPod supports [Ollama](https://ollama.com) as an alternative to the Anthropic API, in both flavors:
+
+- **Local Ollama** (`http://host:11434`) runs models on your own hardware with no auth, no API costs, and no data leaving your machine.
+- **Ollama Cloud** (`https://ollama.com/api`) runs hosted models from ollama.com; you still use the same OpenAI-compatible endpoints but every request carries `Authorization: Bearer <key>`.
+
+Both are configured the same way in MinusPod: pick `Ollama` in Settings > LLM Provider, set the Base URL to point at your server, and (for Cloud) paste your ollama.com key into the API key field. The key is encrypted at rest. Leave the field blank for local.
 
 ### Setup
 

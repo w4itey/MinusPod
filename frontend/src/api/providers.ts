@@ -1,6 +1,6 @@
 import { apiRequest } from './client';
 
-export type ProviderName = 'anthropic' | 'openai' | 'openrouter' | 'whisper';
+export type ProviderName = 'anthropic' | 'openai' | 'openrouter' | 'whisper' | 'ollama';
 
 export interface ProviderStatus {
   configured: boolean;
@@ -15,6 +15,7 @@ export interface ProvidersResponse {
   openai: ProviderStatus;
   openrouter: ProviderStatus;
   whisper: ProviderStatus;
+  ollama: ProviderStatus;
 }
 
 export interface ProviderUpdatePayload {

@@ -6,6 +6,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-04-13
+
+### Added
+- Ollama Cloud support. The Settings > LLM Provider section now exposes a key input when Ollama is selected, backed by the same encrypted store as the other providers (DB slot `ollama_api_key`, env fallback `OLLAMA_API_KEY`). Local Ollama still works with the field left blank. API: `/api/v1/settings/providers/ollama` joins the existing provider surface; the path-param enum now includes `ollama`.
+
+### Changed
+- `src/llm_client.py::_build_client` now threads the Ollama key (or `not-needed` fallback) into `OpenAICompatibleClient` for the Ollama branch. `get_api_key()` returns the Ollama key when the active provider is Ollama.
+
 ## [1.3.2] - 2026-04-13
 
 ### Security

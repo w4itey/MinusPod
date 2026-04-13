@@ -21,6 +21,7 @@ function keyProviderFor(p: LlmProvider): ProviderName | null {
   if (p === LLM_PROVIDERS.ANTHROPIC) return 'anthropic';
   if (p === LLM_PROVIDERS.OPENROUTER) return 'openrouter';
   if (p === LLM_PROVIDERS.OPENAI_COMPATIBLE) return 'openai';
+  if (p === LLM_PROVIDERS.OLLAMA) return 'ollama';
   return null;
 }
 
@@ -29,6 +30,7 @@ const KEY_META: Record<ProviderName, { placeholder: string; label: string; helpe
   openrouter: { placeholder: 'sk-or-v1-...', label: 'OpenRouter API key', helper: 'Get your API key from openrouter.ai/keys' },
   openai:     { placeholder: 'sk-...', label: 'API key' },
   whisper:    { placeholder: 'sk-...', label: 'API key' },
+  ollama:     { placeholder: 'Leave blank for local Ollama; paste an ollama.com key for Cloud', label: 'Ollama API key', helper: 'Local Ollama does not require a key. Ollama Cloud keys come from ollama.com/settings/keys.' },
 };
 
 function LLMProviderSection({
@@ -86,7 +88,7 @@ function LLMProviderSection({
           </div>
         )}
 
-        {keyProvider ? (
+        {keyProvider && (
           <ProviderKeyField
             provider={keyProvider}
             status={status}
@@ -98,8 +100,6 @@ function LLMProviderSection({
             onClear={onProviderKeyClear}
             onTest={onProviderKeyTest}
           />
-        ) : (
-          <p className="text-sm text-muted-foreground">Ollama runs locally and does not require an API key.</p>
         )}
       </div>
     </CollapsibleSection>
