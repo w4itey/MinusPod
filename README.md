@@ -317,9 +317,22 @@ Customize ad detection in Settings:
 - **Audio Bitrate** - Output bitrate for processed audio (default 128k)
 - **System Prompts** - Customizable prompts for first pass and verification detection
 
+### Provider API Keys
+
+From **Settings → Providers & API Keys** you can configure Anthropic, OpenAI-compatible, OpenRouter, and remote Whisper credentials from the UI (or via the REST API at `/api/v1/settings/providers`) without restarting the container. Keys are encrypted at rest with AES-256-GCM.
+
+**Prerequisites (both are required to use the feature):**
+
+1. Set `MINUSPOD_MASTER_PASSPHRASE` in the container environment. This value is the input to the PBKDF2 key derivation that produces the encryption key. Treat it like any other production secret - keep it stable, back it up, and do not commit it. Rotating it is an intentional, explicit operation (future work).
+2. Set an admin password in the UI so Settings is reachable. The admin password is an operational gate for the Settings surface; it is not used as encryption material and changing it does not touch stored keys.
+
+If `MINUSPOD_MASTER_PASSPHRASE` is missing, the Providers section renders a "Setup required" banner, the API returns `409 provider_crypto_unavailable`, and existing env-var credentials continue to work. No key material is ever returned in GET responses; the API only reports whether each provider is configured and whether the active value comes from the database or the environment.
+
 ## Finding Podcast RSS Feeds
 
 MinusPod includes a built-in podcast search powered by [PodcastIndex.org](https://podcastindex.org). Search by name directly from the Add Feed page. To enable search, get free API credentials at [api.podcastindex.org/signup](https://api.podcastindex.org/signup) and add them in Settings > Podcast Search.
+
+![Podcast search on the Add Feed page, Dracula dark theme](docs/images/podcast-search-dark.png)
 
 You can also find RSS feeds manually:
 

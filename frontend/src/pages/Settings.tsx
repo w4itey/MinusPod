@@ -16,6 +16,7 @@ import ProcessingQueueSection from './settings/ProcessingQueueSection';
 import AppearanceSection from './settings/AppearanceSection';
 import PodcastIndexSection from './settings/PodcastIndexSection';
 import LLMProviderSection from './settings/LLMProviderSection';
+import ProvidersSection from './settings/ProvidersSection';
 import AIModelsSection from './settings/AIModelsSection';
 import TranscriptionSection from './settings/TranscriptionSection';
 import AudioSection from './settings/AudioSection';
@@ -297,6 +298,8 @@ function Settings() {
       </div>
 
       <SettingsGroupHeader title="AI & Processing" />
+
+      <ProvidersSection />
 
       <LLMProviderSection
         llmProvider={llmProvider}

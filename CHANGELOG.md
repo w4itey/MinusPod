@@ -6,6 +6,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-04-13
+
+### Added
+- Provider & API key configuration via UI and API. New section under Settings lets an authenticated admin set Anthropic, OpenAI-compatible, OpenRouter, and remote Whisper API keys (plus base URL and model where applicable), test the connection, and clear the stored value to fall back to the environment variable.
+- New endpoints: `GET /api/v1/settings/providers`, `PUT /api/v1/settings/providers/<name>`, `DELETE /api/v1/settings/providers/<name>`, `POST /api/v1/settings/providers/<name>/test`. `GET` returns only configured/source booleans and never echoes key values.
+
+### Security
+- Provider API keys stored in the `settings` table are now encrypted with AES-256-GCM. The data-encryption key is derived via PBKDF2-HMAC-SHA256 (600k iterations) from `MINUSPOD_MASTER_PASSPHRASE` and a random 16-byte salt persisted as `provider_crypto_salt`. Ciphertext envelope `enc:v1:<b64 nonce>:<b64 ct+tag>` supports future rotation. Encryption is decoupled from admin auth, so password changes do not touch stored keys.
+- Feature is locked when `MINUSPOD_MASTER_PASSPHRASE` is unset; the API returns `409 provider_crypto_unavailable` and the UI shows a "Setup required" banner. Env-var credentials continue to work in locked mode.
+- Legacy plaintext rows for `openrouter_api_key` and `whisper_api_key` are read transparently and upgraded to ciphertext on the next save via the UI.
+
+### Changed
+- `get_effective_anthropic_api_key()` and `get_effective_openai_api_key()` added alongside the existing OpenRouter helper, giving all four providers the same DB-then-env resolution path.
+
 ## [1.1.3] - 2026-04-12
 
 ### Security
