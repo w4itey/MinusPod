@@ -447,6 +447,12 @@ MinusPod supports [Ollama](https://ollama.com) as an alternative to the Anthropi
 
 Both are configured the same way in MinusPod: pick `Ollama` in Settings > LLM Provider, set the Base URL to point at your server, and (for Cloud) paste your ollama.com key into the API key field. The key is encrypted at rest. Leave the field blank for local.
 
+### Note on Ollama Cloud model selection
+
+Ollama Cloud's `/v1/models` endpoint returns the full Ollama library catalog — including preview tags and local-only models — even though only a subset are actually routable through Cloud. MinusPod's model dropdown surfaces whatever the endpoint advertises, so you may see entries like `gemma4:31b`, `kimi-k2:1t`, or `gpt-oss:120b` that return `404 not_found_error` when called. If an episode processes with zero ad detections and the logs show `{"type":"error","error":{"type":"not_found_error"}}`, the selected model isn't actually served by Cloud.
+
+For the authoritative cloud-hosted list, check `https://ollama.com/search?c=cloud`. Cross-reference the base name (before the `:`) against the dropdown entry.
+
 ### Setup
 
 1. Install and start Ollama on your host machine
