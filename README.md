@@ -319,14 +319,14 @@ Customize ad detection in Settings:
 
 ### Provider API Keys
 
-From **Settings → Providers & API Keys** you can configure Anthropic, OpenAI-compatible, OpenRouter, and remote Whisper credentials from the UI (or via the REST API at `/api/v1/settings/providers`) without restarting the container. Keys are encrypted at rest with AES-256-GCM.
+You can set the Anthropic, OpenAI-compatible, OpenRouter, Ollama, and remote Whisper keys from the UI (Settings > LLM Provider and Settings > Transcription) or via `PUT /api/v1/settings/providers/<name>`. No container restart needed. Keys are encrypted with AES-256-GCM.
 
-**Prerequisites (both are required to use the feature):**
+Two things have to be in place first:
 
-1. Set `MINUSPOD_MASTER_PASSPHRASE` in the container environment. This value is the input to the PBKDF2 key derivation that produces the encryption key. Treat it like any other production secret - keep it stable, back it up, and do not commit it. To rotate it later, use Settings > Security > Provider Key Encryption (or `POST /api/v1/settings/providers/rotate-passphrase`); the call re-encrypts all stored keys in a single transaction, after which you must update the env var to the new value before the next restart.
-2. Set an admin password in the UI so Settings is reachable. The admin password is an operational gate for the Settings surface; it is not used as encryption material and changing it does not touch stored keys.
+1. `MINUSPOD_MASTER_PASSPHRASE` set in the container environment. PBKDF2 derives the encryption key from it, so treat it like any other production secret: back it up, keep it stable, don't commit it. To rotate, use Settings > Security > Provider Key Encryption (or `POST /api/v1/settings/providers/rotate-passphrase`). The call re-encrypts every stored key in one transaction, then you must update the env var to the new value before the next restart — otherwise the next boot won't decrypt anything.
+2. An admin password set in the UI, so Settings is reachable. The password gates the surface only; it isn't part of the crypto. Changing it leaves stored keys untouched.
 
-If `MINUSPOD_MASTER_PASSPHRASE` is missing, the key inputs inside the LLM Provider and Transcription sections collapse to a one-line "Setup required" note, the API returns `409 provider_crypto_unavailable` on write, and existing env-var credentials continue to work. No key material is ever returned in GET responses; the API only reports whether each provider is configured and whether the active value comes from the database or the environment.
+If the passphrase is missing, the key inputs collapse to a "Setup required" note, the API returns `409 provider_crypto_unavailable`, and env-var credentials keep working. GET responses never include key values, only booleans plus a `db`/`env`/`none` source marker.
 
 ## Finding Podcast RSS Feeds
 
@@ -384,8 +384,8 @@ This is a comma-separated list of domains excluded from Audiobookshelf's SSRF fi
 | `RETENTION_PERIOD` | `1440` | **Deprecated.** Legacy minutes-based retention (auto-converted to days on first startup). Use the Settings UI or `PUT /api/v1/settings/retention` instead. Retention now resets episodes to "discovered" instead of deleting them. |
 | `AD_DETECTION_MAX_TOKENS` | `2000` | Maximum tokens for LLM ad detection responses (increase if responses are being truncated) |
 | `APP_PASSWORD` | _(none)_ | Initial password for web UI (can also be set in Settings > Security) |
-| `OLLAMA_API_KEY` | _(none)_ | API key for Ollama Cloud (`https://ollama.com/api`). Leave unset when running against a local Ollama server. Also accepted via Settings > LLM Provider > API key (encrypted). |
-| `MINUSPOD_MASTER_PASSPHRASE` | _(none)_ | Unlocks the encrypted provider-key store (Settings > LLM Provider, Settings > Transcription). When unset the key inputs show "Setup required" and only env-var credentials are used. Keep it stable; losing it makes stored keys unreadable (env fallback still works). |
+| `OLLAMA_API_KEY` | _(none)_ | Ollama Cloud key. Leave unset for local. Can also be set in Settings > LLM Provider (encrypted). |
+| `MINUSPOD_MASTER_PASSPHRASE` | _(none)_ | Unlocks the encrypted provider-key store. Without it, the UI shows "Setup required" and only env-var keys are used. Keep it stable — lose it and stored keys become unreadable (env fallback still works). |
 | `LOG_LEVEL` | `INFO` | Logging level (DEBUG, INFO, WARNING, ERROR) |
 | `DATA_DIR` | `/app/data` | Data storage directory |
 | `PODCAST_INDEX_API_KEY` | _(none)_ | PodcastIndex.org API key for podcast search (or configure in Settings) |
@@ -440,18 +440,18 @@ Note: The AI model is configured via the Settings UI, not environment variables.
 
 ## Using Ollama (Local or Cloud)
 
-MinusPod supports [Ollama](https://ollama.com) as an alternative to the Anthropic API, in both flavors:
+[Ollama](https://ollama.com) is an alternative to the Anthropic API. MinusPod supports both flavors:
 
-- **Local Ollama** (`http://host:11434`) runs models on your own hardware with no auth, no API costs, and no data leaving your machine.
-- **Ollama Cloud** (`https://ollama.com/api`) runs hosted models from ollama.com; you still use the same OpenAI-compatible endpoints but every request carries `Authorization: Bearer <key>`. A free tier is available and tested against this pipeline; generate a key at `ollama.com/settings/keys`.
+- **Local** (`http://host:11434`) — no auth, no API costs, nothing leaves the machine.
+- **Cloud** (`https://ollama.com/api`) — same OpenAI-compatible endpoints, just with `Authorization: Bearer <key>` on every request. Free tier works for this pipeline. Grab a key at [ollama.com/settings/keys](https://ollama.com/settings/keys).
 
-Both are configured the same way in MinusPod: pick `Ollama` in Settings > LLM Provider, set the Base URL to point at your server, and (for Cloud) paste your ollama.com key into the API key field. The key is encrypted at rest. Leave the field blank for local.
+Configuration is identical either way: pick `Ollama` in Settings > LLM Provider, set the Base URL, and (for Cloud) paste the key. The key is stored encrypted. Leave it blank for local.
 
-### Note on Ollama Cloud model selection
+### Heads up about Ollama Cloud model selection
 
-Ollama Cloud's `/v1/models` endpoint returns the full Ollama library catalog — including preview tags and local-only models — even though only a subset are actually routable through Cloud. MinusPod's model dropdown surfaces whatever the endpoint advertises, so you may see entries like `gemma4:31b`, `kimi-k2:1t`, or `gpt-oss:120b` that return `404 not_found_error` when called. If an episode processes with zero ad detections and the logs show `{"type":"error","error":{"type":"not_found_error"}}`, the selected model isn't actually served by Cloud.
+Ollama Cloud's `/v1/models` advertises the full Ollama library, including previews and local-only tags that Cloud won't actually route. The dropdown shows whatever the endpoint returns, so entries like `gemma4:31b`, `kimi-k2:1t`, and `gpt-oss:120b` can appear but 404 when called.
 
-For the authoritative cloud-hosted list, check `https://ollama.com/search?c=cloud`. Cross-reference the base name (before the `:`) against the dropdown entry.
+If an episode processes with zero ads and the logs show `{"type":"error","error":{"type":"not_found_error"}}`, the model isn't really on Cloud. The reliable list is at [ollama.com/search?c=cloud](https://ollama.com/search?c=cloud). Cross-check the base name (before the `:`) before saving.
 
 ### Setup
 
