@@ -155,7 +155,7 @@ def _get_cached_secret(key: str) -> Optional[str]:
         from database import Database
         val = Database().get_secret(key)
     except Exception:
-        logger.exception("Failed to read secret %s", key)
+        logger.exception("secrets_crypto read failed")
         val = None
     with _provider_cache_lock:
         _provider_cache[key] = {'val': val, 'ts': time.monotonic()}

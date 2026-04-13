@@ -118,10 +118,10 @@ class SettingsMixin:
         try:
             return decrypt(self, raw)
         except CryptoUnavailableError:
-            logger.warning("Cannot decrypt %s: provider crypto unavailable", key)
+            logger.warning("secrets_crypto unavailable; skipping decrypt")
             return None
         except Exception:
-            logger.exception("Failed to decrypt secret %s", key)
+            logger.exception("secrets_crypto decrypt failed")
             return None
 
     def set_secret(self, key: str, plaintext: str):
