@@ -6,6 +6,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.3] - 2026-04-14
+
+### Fixed
+- Closed CodeQL alert #5 `py/stack-trace-exposure`. Split the blueprint error handler in two: `HTTPException` subclasses return a structured JSON payload derived from `exc.code` / `exc.description`; any other exception is logged server-side via `logger.exception` and returns a generic `{"error": "Internal server error", "status": 500}`. The raw exception object no longer flows into the HTTP response.
+
+### Documentation
+- README: clarified processing/caching wording ("An episode is processed once..."), expanded HTTP 503 retry behavior to name the `Retry-After` values (30s / 60s), added `large-v3`, `turbo`, and `.en` variants to the `WHISPER_MODEL` row, added a note about LLM non-determinism above the Ollama recommendations, and softened the `qwen3.5:122b` claim to reflect it was author testing, not a broad benchmark.
+
 ## [1.5.2] - 2026-04-13
 
 ### Fixed

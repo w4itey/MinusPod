@@ -153,17 +153,18 @@ def log_request(f):
     return decorated
 
 
-@api.errorhandler(Exception)
-def _handle_uncaught_exception(exc):
-    """Return a sanitized 500 instead of letting Flask serve the traceback.
+from werkzeug.exceptions import HTTPException as _HTTPException
 
-    The full exception is logged server-side via log_request; the client
-    sees only a generic message so stack frames never leak.
-    """
-    # Let HTTPException subclasses (abort(400), 404, etc.) flow normally.
-    from werkzeug.exceptions import HTTPException
-    if isinstance(exc, HTTPException):
-        return exc
+
+@api.errorhandler(_HTTPException)
+def _handle_http_exception(exc):
+    """Pass werkzeug HTTPException (abort(400), 404, etc.) through unchanged."""
+    return jsonify({'error': exc.description, 'status': exc.code}), exc.code
+
+
+@api.errorhandler(Exception)
+def _handle_uncaught_exception(_exc):
+    """Return a sanitized 500; the traceback is logged server-side only."""
     logger.exception("Unhandled exception in API request")
     return jsonify({'error': 'Internal server error', 'status': 500}), 500
 

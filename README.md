@@ -38,7 +38,7 @@ MinusPod is a self-hosted server that removes ads before you ever hit play. It t
 3. **Audio Processing** - FFmpeg removes detected ads and inserts short audio markers
 4. **Serving** - Flask serves modified RSS feeds and processed audio files
 
-Processing happens on-demand when you play an episode, or automatically when new episodes appear. First play takes a few minutes, subsequent plays are instant (cached).
+Processing happens on-demand when you play an episode, or automatically when new episodes appear. An episode is processed once; processing time depends on episode length, hardware, and chosen models. After processing, the output is stored on disk and served directly on subsequent plays.
 
 ## Advanced Features (Quick Reference)
 
@@ -89,8 +89,9 @@ To prevent memory issues from concurrent processing, episodes are processed one 
 
 When you request an episode that needs processing:
 1. If nothing is processing, it starts in the background and returns HTTP 503 with `Retry-After: 30`
-2. If another episode is processing, it returns HTTP 503 (your podcast app will retry)
-3. Once processed, subsequent requests serve the cached file instantly
+2. If another episode is currently processing, it returns HTTP 503 with `Retry-After: 30`
+3. If the queue is busy and the episode gets queued behind another, it returns HTTP 503 with `Retry-After: 60`
+4. Once processed, subsequent requests serve the stored file directly from disk
 
 HEAD requests (sent by podcast apps like Pocket Casts during feed refresh) proxy headers from the upstream audio source without triggering processing. This prevents feed refreshes from flooding the processing queue.
 
@@ -375,7 +376,7 @@ This is a comma-separated list of domains excluded from Audiobookshelf's SSRF fi
 | `OPENAI_MODEL` | _(none)_ | Model for OpenAI-compatible/Ollama providers. **Required for Ollama** (e.g. `qwen3:14b`). Defaults to `claude-sonnet-4-5-20250929` for openai-compatible if unset. |
 | `BASE_URL` | `http://localhost:8000` | Public URL for generated feed links |
 | `UI_BASE_URL` | _(falls back to BASE_URL)_ | Public URL for UI links in webhooks (set if UI is on a different domain than feeds) |
-| `WHISPER_MODEL` | `small` | Whisper model size (tiny/base/small/medium/large) |
+| `WHISPER_MODEL` | `small` | Whisper model size. Supports faster-whisper model names: `tiny`, `base`, `small`, `medium`, `large-v3`, `turbo`, plus `.en` variants (e.g. `small.en`) for English-only |
 | `WHISPER_DEVICE` | `cuda` | Device for Whisper (cuda/cpu). Set to `cpu` when using API backend to skip GPU init. |
 | `WHISPER_BACKEND` | `local` | Whisper backend: `local` (faster-whisper) or `openai-api` (remote HTTP) |
 | `WHISPER_API_BASE_URL` | _(none)_ | Base URL for OpenAI-compatible whisper API (e.g. `http://host.docker.internal:8765/v1`) |
@@ -478,6 +479,8 @@ The `OPENAI_API_KEY` variable is not required for Ollama. Token counts will stil
 
 Models are loaded sequentially, not concurrently -- VRAM requirements are not additive between passes.
 
+> **Note:** Detection quality varies between models and between runs of the same model. LLMs are non-deterministic, so identical inputs can yield different outputs. Expect variation, and treat the recommendations below as starting points rather than guarantees.
+
 #### Pass 1 -- First Pass Detection
 
 Hardest task. Contextual reasoning, host-read ads, new sponsors. Use your best model here.
@@ -489,7 +492,7 @@ Hardest task. Contextual reasoning, host-read ads, new sponsors. Use your best m
 | 16GB | `qwen3:14b` | Q5_K_M | Higher quality quant; use if you have headroom. |
 | 24GB | `qwen3.5:27b` | Q4_K_M | Strong contextual reasoning. 256K context. |
 | 24GB | `qwen3.5:35b` | Q4_K_M | Best quality under 40GB. 256K context. |
-| 40GB+ | `qwen3.5:122b` | Q4_K_M | Closest open-weights match to Claude Sonnet quality. |
+| 40GB+ | `qwen3.5:122b` | Q4_K_M | In the same tier as Claude Sonnet for this task in author testing. |
 
 #### Verification Pass
 
