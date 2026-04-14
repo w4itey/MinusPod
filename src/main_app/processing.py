@@ -589,7 +589,7 @@ def _finalize_episode(slug, episode_id, episode_title, podcast_name,
                        original_duration, new_duration, start_time):
     """Pipeline stage: Update DB, record history, refresh RSS."""
     from main_app.feeds import get_feed_map, refresh_rss_feed
-    db, _, _, _, _, _, _, _, _, _ = _get_components()
+    db, storage, _, _, _, _, _, _, _, _ = _get_components()
     original_final = storage.get_original_path(slug, episode_id)
     original_file_rel = f"episodes/{episode_id}-original.mp3" if original_final.exists() else None
     db.upsert_episode(slug, episode_id,
