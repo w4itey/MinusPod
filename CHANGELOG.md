@@ -6,6 +6,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-04-14
+
+### Added
+- **Review mode in the Ad Editor** (issue #129). The ad editor now retains the pre-cut (original) audio alongside the processed output and exposes a "Processed / Original" toggle above the editor. Switching to Original plays the untouched download at the ad's original timestamps, so boundary adjustments can be verified by ear — no more fixing cuts blind from the transcript. The toggle disables itself with an explanatory tooltip for episodes that have no retained original (processed before this release, setting off, or expired by retention).
+- New settings: `GET`/`PUT /api/v1/settings/audio` with `keepOriginalAudio` (default `true`). Exposed in the UI as a toggle under Storage & Retention. Roughly doubles per-episode audio storage when on.
+- New endpoint: `GET /api/v1/feeds/{slug}/episodes/{episodeId}/original.mp3` streams the retained original; 404s when not available. Supports Range requests.
+- Episode responses now include `hasOriginalAudio` and `originalAudioUrl`.
+
+### Schema
+- `episodes.original_file` nullable TEXT column (idempotent migration).
+- `settings.keep_original_audio` seeded to `true` on fresh installs.
+
+### Notes
+- Existing episodes processed before v1.6.0 do not get originals retroactively. Reprocess an episode to capture one.
+- Originals follow the same retention cleanup schedule as the processed file.
+
 ## [1.5.2] - 2026-04-13
 
 ### Fixed

@@ -33,6 +33,9 @@ function EpisodeDetail() {
   const [showReprocessMenu, setShowReprocessMenu] = useState(false);
   const [editorSelectedAdIndex, setEditorSelectedAdIndex] = useState(0);
   const [savedScrollY, setSavedScrollY] = useState<number | null>(null);
+  const [reviewMode, setReviewMode] = useState<'processed' | 'original'>(
+    () => (localStorage.getItem('ad-editor-review-mode') === 'original' ? 'original' : 'processed')
+  );
   const [originalTranscriptRequested, setOriginalTranscriptRequested] = useState(
     () => localStorage.getItem('episode-original-transcript') === 'true'
   );
@@ -366,10 +369,53 @@ function EpisodeDetail() {
           {/* AdEditor for reviewing/editing ad detections */}
           {showEditor && episode.status === 'completed' && (
             <div className="mb-4" ref={editorRef}>
+              <div className="mb-3 flex items-center gap-3 text-sm">
+                <span className="text-muted-foreground">Review mode:</span>
+                <div className="inline-flex rounded-md border border-input overflow-hidden" role="group">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReviewMode('processed');
+                      localStorage.setItem('ad-editor-review-mode', 'processed');
+                    }}
+                    className={`px-3 py-1 transition-colors ${
+                      reviewMode === 'processed'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-background text-muted-foreground hover:bg-secondary'
+                    }`}
+                  >
+                    Processed
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!episode.hasOriginalAudio}
+                    onClick={() => {
+                      setReviewMode('original');
+                      localStorage.setItem('ad-editor-review-mode', 'original');
+                    }}
+                    title={
+                      episode.hasOriginalAudio
+                        ? 'Play the pre-cut audio to hear exactly what was removed'
+                        : 'Retain original audio is off in settings, or this episode was processed before the feature existed. Reprocess the episode to capture the original.'
+                    }
+                    className={`px-3 py-1 border-l border-input transition-colors ${
+                      reviewMode === 'original' && episode.hasOriginalAudio
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-background text-muted-foreground hover:bg-secondary'
+                    } disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-background`}
+                  >
+                    Original
+                  </button>
+                </div>
+              </div>
               <AdEditor
                 detectedAds={detectedAds}
                 audioDuration={episode.originalDuration ?? 0}
-                audioUrl={`/episodes/${slug}/${episode.id}.mp3`}
+                audioUrl={
+                  reviewMode === 'original' && episode.hasOriginalAudio && episode.originalAudioUrl
+                    ? episode.originalAudioUrl
+                    : `/episodes/${slug}/${episode.id}.mp3`
+                }
                 onCorrection={handleCorrection}
                 onClose={() => {
                   setShowEditor(false);

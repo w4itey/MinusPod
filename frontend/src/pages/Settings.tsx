@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getSettings, updateSettings, resetSettings, resetPrompts, getModels, getWhisperModels, getSystemStatus, runCleanup, getProcessingEpisodes, cancelProcessing, refreshModels, getRetention, updateRetention, getProcessingTimeouts, updateProcessingTimeouts } from '../api/settings';
+import { getSettings, updateSettings, resetSettings, resetPrompts, getModels, getWhisperModels, getSystemStatus, runCleanup, getProcessingEpisodes, cancelProcessing, refreshModels, getRetention, updateRetention, getProcessingTimeouts, updateProcessingTimeouts, getAudioSettings, updateAudioSettings } from '../api/settings';
 import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import type { LlmProvider, WhisperBackend, WhisperApiConfig } from '../api/types';
@@ -85,6 +85,7 @@ function Settings() {
   const [podcastIndexApiKey, setPodcastIndexApiKey] = useState('');
   const [podcastIndexApiSecret, setPodcastIndexApiSecret] = useState('');
   const [retentionDays, setRetentionDays] = useState(30);
+  const [keepOriginalAudio, setKeepOriginalAudio] = useState(true);
   const [softTimeoutMinutes, setSoftTimeoutMinutes] = useState(60);
   const [hardTimeoutMinutes, setHardTimeoutMinutes] = useState(120);
   const [timeoutsError, setTimeoutsError] = useState<string | null>(null);
@@ -127,6 +128,11 @@ function Settings() {
     queryFn: getProcessingTimeouts,
   });
 
+  const { data: audioSettings } = useQuery({
+    queryKey: ['audio-settings'],
+    queryFn: getAudioSettings,
+  });
+
   // Ensure System Status section is always expanded on page load
   useEffect(() => {
     localStorage.setItem('settings-section-system-status', 'true');
@@ -155,6 +161,17 @@ function Settings() {
       setHardTimeoutMinutes(Math.round(processingTimeouts.hardTimeoutSeconds / 60));
     }
   }, [processingTimeouts]);
+
+  useEffect(() => {
+    if (audioSettings) {
+      setKeepOriginalAudio(audioSettings.keepOriginalAudio);
+    }
+  }, [audioSettings]);
+
+  const audioSettingsMutation = useMutation({
+    mutationFn: (keep: boolean) => updateAudioSettings(keep),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['audio-settings'] }),
+  });
 
   const cancelMutation = useMutation({
     mutationFn: (params: { slug: string; episodeId: string }) =>
@@ -438,6 +455,12 @@ function Settings() {
       <SettingsGroupHeader title="Data & Security" />
 
       <StorageRetentionSection
+        keepOriginalAudio={keepOriginalAudio}
+        onKeepOriginalAudioChange={(enabled) => {
+          setKeepOriginalAudio(enabled);
+          audioSettingsMutation.mutate(enabled);
+        }}
+        keepOriginalSaveIsPending={audioSettingsMutation.isPending}
         retentionEnabled={retentionEnabled}
         retentionDays={retentionDays}
         onRetentionEnabledChange={setRetentionEnabled}

@@ -515,6 +515,32 @@ def update_retention_settings():
     })
 
 
+@api.route('/settings/audio', methods=['GET'])
+@log_request
+def get_audio_settings():
+    """Get audio-related settings (currently: keep original audio)."""
+    db = get_database()
+    raw = db.get_setting('keep_original_audio')
+    keep = (raw or 'true').lower() != 'false'
+    return json_response({'keepOriginalAudio': keep})
+
+
+@api.route('/settings/audio', methods=['PUT'])
+@log_request
+def update_audio_settings():
+    """Update audio-related settings."""
+    data = request.get_json() or {}
+    if 'keepOriginalAudio' not in data:
+        return error_response('keepOriginalAudio is required', 400)
+    keep = data['keepOriginalAudio']
+    if not isinstance(keep, bool):
+        return error_response('keepOriginalAudio must be a boolean', 400)
+    db = get_database()
+    db.set_setting('keep_original_audio', 'true' if keep else 'false', is_default=False)
+    logger.info(f"Updated keep_original_audio to {keep}")
+    return json_response({'keepOriginalAudio': keep})
+
+
 @api.route('/settings/processing-timeouts', methods=['GET'])
 @log_request
 def get_processing_timeouts():

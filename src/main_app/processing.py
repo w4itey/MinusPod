@@ -590,9 +590,12 @@ def _finalize_episode(slug, episode_id, episode_title, podcast_name,
     """Pipeline stage: Update DB, record history, refresh RSS."""
     from main_app.feeds import get_feed_map, refresh_rss_feed
     db, _, _, _, _, _, _, _, _, _ = _get_components()
+    original_final = storage.get_original_path(slug, episode_id)
+    original_file_rel = f"episodes/{episode_id}-original.mp3" if original_final.exists() else None
     db.upsert_episode(slug, episode_id,
         status='processed',
         processed_file=f"episodes/{episode_id}.mp3",
+        original_file=original_file_rel,
         original_duration=original_duration,
         new_duration=new_duration,
         ads_removed=len(ads_to_remove) + verification_count,
@@ -863,6 +866,19 @@ def process_episode(slug: str, episode_id: str, episode_url: str,
             # Move processed file to final location
             final_path = storage.get_episode_path(slug, episode_id)
             shutil.move(processed_path, final_path)
+
+            # Retain the pre-cut audio for the ad-editor "Review mode" playback
+            # when the user hasn't opted out. Moved rather than copied so the
+            # temp file in the finally-block below no longer exists.
+            keep_original_raw = db.get_setting('keep_original_audio')
+            keep_original = (keep_original_raw or 'true').lower() != 'false'
+            if keep_original and os.path.exists(audio_path):
+                original_final = storage.get_original_path(slug, episode_id)
+                original_final.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(audio_path, original_final)
+                audio_logger.info(
+                    f"[{slug}:{episode_id}] Retained original audio at {original_final.name}"
+                )
 
             # Stage 7: Generate assets
             all_cuts_for_assets = ads_to_remove + v_ads_for_ui

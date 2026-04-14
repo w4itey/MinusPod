@@ -231,7 +231,12 @@ The server includes a web-based management UI at `/ui/`:
 
 ### Ad Editor Workflow
 
-The ad editor follows a review-and-reprocess model. When you listen to a detected ad segment, the audio player plays the processed output (post-cut audio), not the original. You're verifying what the final listener will hear. If a cut sounds wrong, adjust the boundaries and reprocess -- the system re-cuts from the original source audio.
+The ad editor supports two review modes, selected by a toggle above the ads list:
+
+- **Processed** (default) -- plays the post-cut output so you can verify what the final listener will hear. Ad timestamps map onto the new timeline.
+- **Original** -- plays the untouched pre-cut download at the ad's original timestamps, so you can hear exactly what was removed and nudge boundaries with confidence.
+
+Original mode requires the pre-cut audio to have been retained. That's controlled by the "Keep original audio for ad boundary review" toggle under Settings > Storage & Retention (default on). Keeping originals roughly doubles per-episode storage; disable it if disk space is tight. Episodes processed before v1.6.0 don't have a retained original until you reprocess them -- the toggle disables itself with a tooltip in that case.
 
 The **Original Transcript** panel on the Episode Detail page shows the full pre-cut transcript so you can see exactly what text was identified and removed.
 

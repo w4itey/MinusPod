@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS episodes (
     status TEXT DEFAULT 'pending' CHECK(status IN ('discovered','pending','processing','processed','failed','permanently_failed')),
     retry_count INTEGER DEFAULT 0,
     processed_file TEXT,
+    original_file TEXT,
     processed_at TEXT,
     original_duration REAL,
     new_duration REAL,
@@ -495,6 +496,7 @@ class SchemaMixin:
             ('created_at', "TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"),
             ('artwork_url', 'TEXT'),
             ('processed_file', 'TEXT'),
+            ('original_file', 'TEXT'),
             ('processed_at', 'TEXT'),
             ('original_duration', 'REAL'),
             ('ads_removed_firstpass', 'INTEGER DEFAULT 0'),
@@ -1252,6 +1254,15 @@ class SchemaMixin:
             """INSERT INTO settings (key, value, is_default) VALUES (?, ?, 1)
                ON CONFLICT(key) DO NOTHING""",
             ('retention_period_minutes', retention_minutes)
+        )
+
+        # Keep original (pre-cut) audio alongside processed output so the ad
+        # editor can play the untouched track for boundary review. Roughly
+        # doubles per-episode audio storage; user can opt out in Settings.
+        conn.execute(
+            """INSERT INTO settings (key, value, is_default) VALUES (?, ?, 1)
+               ON CONFLICT(key) DO NOTHING""",
+            ('keep_original_audio', 'true')
         )
 
         # Processing timeouts (soft = auto-clear stuck jobs; hard = force-release).

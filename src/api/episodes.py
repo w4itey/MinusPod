@@ -5,7 +5,7 @@ import os
 import re
 from datetime import datetime, timezone
 
-from flask import request
+from flask import request, send_file, abort
 
 from api import (
     api, limiter, log_request, json_response, error_response,
@@ -162,6 +162,8 @@ def get_episode(slug, episode_id):
         'newDuration': episode['new_duration'],
         'originalUrl': episode['original_url'],
         'processedUrl': f"{base_url}/episodes/{slug}/{episode_id}.mp3",
+        'hasOriginalAudio': bool(episode.get('original_file')),
+        'originalAudioUrl': f"/api/v1/feeds/{slug}/episodes/{episode_id}/original.mp3",
         'adsRemoved': episode['ads_removed'],
         'adsRemovedFirstPass': episode.get('ads_removed_firstpass', 0),
         'adsRemovedVerification': episode.get('ads_removed_secondpass', 0),
@@ -218,6 +220,29 @@ def get_original_transcript(slug, episode_id):
         'episodeId': episode_id,
         'originalTranscript': transcript
     })
+
+
+@api.route('/feeds/<slug>/episodes/<episode_id>/original.mp3', methods=['GET'])
+@log_request
+def serve_original_audio(slug, episode_id):
+    """Serve the retained pre-cut audio for ad-editor Review mode.
+
+    Returns 404 when the episode has no original retained (global setting
+    off, old episode processed before the feature, or retention expired).
+    """
+    if not all(c.isalnum() or c in '-_' for c in slug):
+        abort(400)
+    if not all(c.isalnum() or c in '-_' for c in episode_id):
+        abort(400)
+    db = get_database()
+    storage = get_storage()
+    episode = db.get_episode(slug, episode_id)
+    if not episode or not episode.get('original_file'):
+        return error_response('Original audio not retained for this episode', 404)
+    path = storage.get_original_path(slug, episode_id)
+    if not path.exists():
+        return error_response('Original audio file missing', 404)
+    return send_file(path, mimetype='audio/mpeg', conditional=True)
 
 
 @api.route('/feeds/<slug>/episodes/<episode_id>/reprocess', methods=['POST'])

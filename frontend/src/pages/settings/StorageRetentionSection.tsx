@@ -1,6 +1,9 @@
 import CollapsibleSection from '../../components/CollapsibleSection';
 
 interface StorageRetentionSectionProps {
+  keepOriginalAudio: boolean;
+  onKeepOriginalAudioChange: (enabled: boolean) => void;
+  keepOriginalSaveIsPending: boolean;
   retentionEnabled: boolean;
   retentionDays: number;
   onRetentionEnabledChange: (enabled: boolean) => void;
@@ -11,6 +14,9 @@ interface StorageRetentionSectionProps {
 }
 
 function StorageRetentionSection({
+  keepOriginalAudio,
+  onKeepOriginalAudioChange,
+  keepOriginalSaveIsPending,
   retentionEnabled,
   retentionDays,
   onRetentionEnabledChange,
@@ -73,6 +79,29 @@ function StorageRetentionSection({
         {saveIsSuccess && (
           <span className="ml-3 text-sm text-green-600 dark:text-green-400">Saved</span>
         )}
+
+        <div className="pt-4 border-t border-border">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <div
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                keepOriginalAudio ? 'bg-primary' : 'bg-secondary'
+              } ${keepOriginalSaveIsPending ? 'opacity-50' : ''}`}
+              onClick={() => !keepOriginalSaveIsPending && onKeepOriginalAudioChange(!keepOriginalAudio)}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  keepOriginalAudio ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </div>
+            <span className="text-sm font-medium text-foreground">
+              Keep original audio for ad boundary review
+            </span>
+          </label>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Retains the pre-cut audio file alongside the processed output so the ad editor can play what was removed. Roughly doubles per-episode audio storage. Only applies to new episodes processed after this is enabled.
+          </p>
+        </div>
       </div>
     </CollapsibleSection>
   );
