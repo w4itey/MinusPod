@@ -234,9 +234,9 @@ The server includes a web-based management UI at `/ui/`:
 The ad editor supports two review modes, selected by a toggle above the ads list:
 
 - **Processed** (default) -- plays the post-cut output so you can verify what the final listener will hear. Ad timestamps map onto the new timeline.
-- **Original** -- plays the untouched pre-cut download at the ad's original timestamps, so you can hear exactly what was removed and nudge boundaries with confidence.
+- **Original** -- plays the pre-cut download at the ad's original timestamps, so you can hear exactly what was removed.
 
-Original mode requires the pre-cut audio to have been retained. That's controlled by the "Keep original audio for ad boundary review" toggle under Settings > Storage & Retention (default on). Keeping originals roughly doubles per-episode storage; disable it if disk space is tight. Episodes processed before v1.6.0 don't have a retained original until you reprocess them -- the toggle disables itself with a tooltip in that case.
+Original mode requires the pre-cut audio to have been retained. That's controlled by the "Keep original audio for ad boundary review" toggle under Settings > Storage & Retention (default on). Keeping originals roughly doubles per-episode storage; disable it if disk is tight. Episodes processed before v1.6.0 have no retained original -- the toggle is disabled (with a tooltip) until you reprocess.
 
 The **Original Transcript** panel on the Episode Detail page shows the full pre-cut transcript so you can see exactly what text was identified and removed.
 
@@ -774,6 +774,9 @@ Key endpoints:
 - `GET /api/v1/system/backup` - Download SQLite database backup
 - `GET /api/v1/settings` - Get current settings (includes LLM provider, API key status)
 - `GET/PUT /api/v1/settings/retention` - Get or update retention configuration (days, enabled/disabled)
+- `GET/PUT /api/v1/settings/audio` - Toggle whether originals are kept for ad editor review (`keepOriginalAudio`)
+- `GET/PUT /api/v1/settings/processing-timeouts` - Soft and hard processing timeouts in seconds
+- `GET /api/v1/feeds/{slug}/episodes/{id}/original.mp3` - Stream the retained pre-cut audio (used by ad editor Review mode)
 - `PUT /api/v1/settings/ad-detection` - Update ad detection config (model, provider, prompts)
 - `GET /api/v1/settings/models` - List available AI models from current provider
 - `POST /api/v1/settings/models/refresh` - Force refresh model list from provider
