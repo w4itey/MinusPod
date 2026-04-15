@@ -20,7 +20,7 @@ MinusPod is a self-hosted server that removes ads before you ever hit play. It t
 - [Environment Variables](#environment-variables)
   - [Using Claude Code Wrapper (Max Subscription)](#using-claude-code-wrapper-max-subscription)
 - [Using Ollama (Local or Cloud)](#using-ollama-local-or-cloud)
-- [Remote Whisper Transcription](#remote-whisper-transcription)
+- [Whisper / Transcription](#whisper--transcription)
 - [Using OpenRouter](#using-openrouter)
 - [LLM Pricing](#llm-pricing)
 - [API](#api)
@@ -163,7 +163,7 @@ Audio analysis runs automatically on every episode (lightweight, uses only ffmpe
 
 ## Requirements
 
-- Docker with NVIDIA GPU support (for local Whisper), **or** a [remote Whisper backend](#remote-whisper-transcription) (no GPU needed)
+- Docker with NVIDIA GPU support (for local Whisper), **or** a [remote Whisper backend](#whisper--transcription) (no GPU needed)
 - Anthropic API key, [OpenRouter](https://openrouter.ai) API key, [Ollama](https://ollama.com) for local inference, **or** any OpenAI-compatible endpoint
 
 ### Memory Requirements
@@ -567,7 +567,7 @@ MinusPod's ad detection pipeline requires models to return structured JSON. The 
 
 Look for `json_parse_failed` or `extraction_method` entries in the application logs. A healthy run will show `json_array_direct` as the extraction method. Fallback methods (`markdown_code_block`, regex variants) indicate the model isn't returning clean JSON and you should consider upgrading to a larger model.
 
-## Remote Whisper Transcription
+## Whisper / Transcription
 
 By default, MinusPod uses faster-whisper with a local NVIDIA GPU for transcription. If you don't have an NVIDIA GPU (e.g. Apple Silicon Mac), you can use any OpenAI-compatible whisper API as the transcription backend.
 
@@ -669,7 +669,7 @@ Three-hour CPU runs with the largest Whisper model hit these. When they fire, th
 
 ## Using OpenRouter
 
-[OpenRouter](https://openrouter.ai) is a unified API that routes to 200+ models (Claude, GPT, Gemini, open-weights) with one API key. OpenRouter is supported as an **LLM provider only** -- it does not support the `/v1/audio/transcriptions` endpoint required for Whisper transcription. For transcription without a GPU, use a [remote Whisper backend](#remote-whisper-transcription) such as Groq.
+[OpenRouter](https://openrouter.ai) is a unified API that routes to 200+ models (Claude, GPT, Gemini, open-weights) with one API key. OpenRouter is supported as an **LLM provider only** -- it does not support the `/v1/audio/transcriptions` endpoint required for Whisper transcription. For transcription without a GPU, use a [remote Whisper backend](#whisper--transcription) such as Groq.
 
 ### Setup
 
