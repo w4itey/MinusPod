@@ -87,6 +87,14 @@ export async function updateRetention(days: number): Promise<RetentionSettings> 
   });
 }
 
+export async function getAudioSettings(): Promise<{ keepOriginalAudio: boolean }> {
+  return apiRequest<{ keepOriginalAudio: boolean }>('/settings/audio');
+}
+
+export async function updateAudioSettings(keepOriginalAudio: boolean): Promise<{ keepOriginalAudio: boolean }> {
+  return apiRequest('/settings/audio', { method: 'PUT', body: { keepOriginalAudio } });
+}
+
 export async function getProcessingTimeouts(): Promise<ProcessingTimeouts> {
   return apiRequest<ProcessingTimeouts>('/settings/processing-timeouts');
 }

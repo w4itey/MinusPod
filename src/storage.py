@@ -113,6 +113,11 @@ class Storage:
         podcast_dir = self.get_podcast_dir(slug)
         return podcast_dir / "episodes" / f"{episode_id}{extension}"
 
+    def get_original_path(self, slug: str, episode_id: str, extension: str = ".mp3") -> Path:
+        """Get path for the retained original (pre-cut) audio file."""
+        podcast_dir = self.get_podcast_dir(slug)
+        return podcast_dir / "episodes" / f"{episode_id}-original{extension}"
+
     def save_rss(self, slug: str, content: str) -> None:
         """Save modified RSS feed to filesystem."""
         podcast_dir = self.get_podcast_dir(slug)
@@ -379,13 +384,18 @@ class Storage:
     # ========== Cleanup Methods ==========
 
     def delete_processed_file(self, slug: str, episode_id: str) -> bool:
-        """Delete the processed audio file for an episode."""
-        processed_path = self.get_episode_path(slug, episode_id, ".mp3")
-        if processed_path and processed_path.exists():
-            processed_path.unlink()
-            logger.debug(f"[{slug}:{episode_id}] Deleted processed audio file")
-            return True
-        return False
+        """Delete the processed audio file and any retained original."""
+        deleted = False
+        for path in (
+            self.get_episode_path(slug, episode_id, ".mp3"),
+            self.get_original_path(slug, episode_id, ".mp3"),
+        ):
+            if path and path.exists():
+                path.unlink()
+                deleted = True
+        if deleted:
+            logger.debug(f"[{slug}:{episode_id}] Deleted processed/original audio files")
+        return deleted
 
 
     def cleanup_episode_files(self, slug: str, episode_id: str) -> int:
@@ -396,14 +406,19 @@ class Storage:
         """
         freed = 0
 
-        # Only delete MP3 file - VTT and chapters are now in database
-        mp3_path = self.get_episode_path(slug, episode_id, '.mp3')
-        if mp3_path.exists():
-            try:
-                freed += mp3_path.stat().st_size
-                mp3_path.unlink()
-            except Exception as e:
-                logger.warning(f"Failed to delete {mp3_path}: {e}")
+        # Only delete MP3 files - VTT and chapters are now in database.
+        # Originals (retained for ad-editor review) are cleaned on the
+        # same schedule as the processed output.
+        for path in (
+            self.get_episode_path(slug, episode_id, '.mp3'),
+            self.get_original_path(slug, episode_id, '.mp3'),
+        ):
+            if path.exists():
+                try:
+                    freed += path.stat().st_size
+                    path.unlink()
+                except Exception as e:
+                    logger.warning(f"Failed to delete {path}: {e}")
 
         return freed
 

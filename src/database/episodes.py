@@ -198,7 +198,7 @@ class EpisodeMixin:
                 values = []
                 for key, value in kwargs.items():
                     if key in ('original_url', 'title', 'description', 'status', 'processed_file',
-                               'processed_at', 'original_duration', 'new_duration',
+                               'original_file', 'processed_at', 'original_duration', 'new_duration',
                                'ads_removed', 'ads_removed_firstpass', 'ads_removed_secondpass',
                                'error_message', 'ad_detection_status', 'artwork_url',
                                'reprocess_mode', 'reprocess_requested_at', 'retry_count',
@@ -459,6 +459,7 @@ class EpisodeMixin:
             """UPDATE episodes
                SET status = 'pending',
                    processed_file = NULL,
+                   original_file = NULL,
                    processed_at = NULL,
                    original_duration = NULL,
                    new_duration = NULL,
@@ -529,7 +530,7 @@ class EpisodeMixin:
         conn.execute(
             f"""UPDATE episodes SET
                 status = 'discovered',
-                processed_file = NULL, processed_at = NULL,
+                processed_file = NULL, original_file = NULL, processed_at = NULL,
                 original_duration = NULL, new_duration = NULL,
                 ads_removed = 0, ads_removed_firstpass = 0, ads_removed_secondpass = 0,
                 error_message = NULL, ad_detection_status = NULL,

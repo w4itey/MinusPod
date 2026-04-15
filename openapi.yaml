@@ -12,7 +12,7 @@ info:
     - Monitor system status and trigger cleanup operations
     - Manage cross-episode ad patterns with network and podcast scope
     - Submit corrections to improve ad detection accuracy
-  version: 1.5.3
+  version: 1.6.1
   contact:
     name: MinusPod
   license:
@@ -917,6 +917,32 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+
+  /feeds/{slug}/episodes/{episodeId}/original.mp3:
+    get:
+      tags:
+        - Episodes
+      summary: Stream the pre-cut (original) audio
+      description: |
+        Returns the untouched audio that was downloaded before ad removal.
+        Used by the Ad Editor's Review mode so users can hear what was
+        cut. 404 when the episode has no original retained (feature disabled
+        in settings, pre-existing episode processed before the feature, or
+        retention expired). Supports Range requests.
+      operationId: serveOriginalAudio
+      parameters:
+        - $ref: '#/components/parameters/slug'
+        - $ref: '#/components/parameters/episodeId'
+      responses:
+        '200':
+          description: Original audio stream
+          content:
+            audio/mpeg:
+              schema:
+                type: string
+                format: binary
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /feeds/{slug}/episodes/{episodeId}/cancel:
     post:
@@ -2969,6 +2995,54 @@ paths:
                     type: integer
                   enabled:
                     type: boolean
+
+  /settings/audio:
+    get:
+      tags:
+        - Settings
+      summary: Get audio-related settings
+      operationId: getAudioSettings
+      responses:
+        '200':
+          description: Audio settings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  keepOriginalAudio:
+                    type: boolean
+                    description: When true, the pre-cut audio file is retained alongside the processed output for the Ad Editor's Review mode. Roughly doubles per-episode storage.
+    put:
+      tags:
+        - Settings
+      summary: Update audio-related settings
+      operationId: updateAudioSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [keepOriginalAudio]
+              properties:
+                keepOriginalAudio:
+                  type: boolean
+      responses:
+        '200':
+          description: Audio settings updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  keepOriginalAudio: { type: boolean }
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /settings/processing-timeouts:
     get:
