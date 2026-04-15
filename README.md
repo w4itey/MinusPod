@@ -13,7 +13,6 @@ MinusPod is a self-hosted server that removes ads before you ever hit play. It t
 - [Web Interface](#web-interface)
   - [Ad Editor Workflow](#ad-editor-workflow)
   - [Screenshots](#screenshots)
-  - [Stats](#stats)
 - [Configuration](#configuration)
 - [Finding Podcast RSS Feeds](#finding-podcast-rss-feeds)
 - [Usage](#usage)
@@ -387,6 +386,7 @@ This is a comma-separated list of domains excluded from Audiobookshelf's SSRF fi
 | `WHISPER_API_BASE_URL` | _(none)_ | Base URL for OpenAI-compatible whisper API (e.g. `http://host.docker.internal:8765/v1`) |
 | `WHISPER_API_KEY` | _(none)_ | API key for whisper API (optional for local servers) |
 | `WHISPER_API_MODEL` | `whisper-1` | Model name sent to whisper API |
+| `WHISPER_LANGUAGE` | `en` | ISO 639-1 language code for transcription (e.g. `en`, `fi`, `es`), or `auto` to let Whisper detect. Seeds fresh installs only -- runtime value lives in the settings table, editable under Settings > Transcription. See [supported languages](https://whisper-api.com/docs/languages/). |
 | `PROCESSING_SOFT_TIMEOUT` | `3600` | Seconds before a stuck job is auto-cleared from the queue. Seeds fresh installs only -- runtime value lives in the settings table, editable under Settings > Transcription or via `PUT /api/v1/settings/processing-timeouts`. Raise this for long episodes on CPU or the largest Whisper model. |
 | `PROCESSING_HARD_TIMEOUT` | `7200` | Seconds before the processing lock is force-released even when a worker is still holding it (stuck subprocess safety net). Same DB-backed override path as the soft timeout. Must exceed it. |
 | `RETENTION_PERIOD` | `1440` | **Deprecated.** Legacy minutes-based retention (auto-converted to days on first startup). Use the Settings UI or `PUT /api/v1/settings/retention` instead. Retention now resets episodes to "discovered" instead of deleting them. |
@@ -653,6 +653,10 @@ WHISPER_DEVICE=cpu
 ```
 
 All settings can also be configured via the Settings UI under the Transcription section.
+
+### Transcription language
+
+Whisper is pinned to English by default. That keeps it from misdetecting on music intros or cold opens (a common failure mode on podcasts). If you run a non-English show, pick the language in Settings > Transcription or set `WHISPER_LANGUAGE` on first boot. Use `auto` for multilingual feeds -- Whisper will detect per request. Full list: [supported languages](https://whisper-api.com/docs/languages/).
 
 ### Processing timeouts
 
