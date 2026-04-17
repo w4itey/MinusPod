@@ -492,7 +492,7 @@ def reprocess_all_episodes(slug):
 
         except Exception as e:
             logger.error(f"Failed to queue {slug}:{episode_id} for reprocessing: {e}")
-            skipped.append({'episodeId': episode_id, 'reason': str(e)})
+            skipped.append({'episodeId': episode_id, 'reason': 'queue failed'})
 
     logger.info(f"Batch reprocess {slug} (mode={mode}): {len(queued)} queued, {len(skipped)} skipped")
 
@@ -570,7 +570,7 @@ def bulk_episode_action(slug):
                 eligible_ids.append(episode_id)
             except Exception as e:
                 logger.error(f"Bulk action error for {slug}:{episode_id}: {e}")
-                errors.append(f"{episode_id}: {str(e)}")
+                errors.append(f"{episode_id}: bulk action failed")
         if eligible_ids:
             db.batch_clear_episode_details(slug, eligible_ids)
             now_str = utc_now_iso()
@@ -594,7 +594,7 @@ def bulk_episode_action(slug):
                 freed_mb += freed
             except Exception as e:
                 logger.error(f"Bulk delete error for {slug}: {e}")
-                errors.append(str(e))
+                errors.append('bulk delete failed')
 
     # Trigger background processing for process/reprocess actions
     if action in ('process', 'reprocess', 'reprocess_full') and queued > 0:

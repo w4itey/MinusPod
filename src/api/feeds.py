@@ -263,7 +263,7 @@ def import_opml():
             imported.append({'url': source_url, 'slug': slug})
             logger.info(f"OPML import: Created feed {slug}")
         except Exception as e:
-            failed.append({'url': source_url, 'error': str(e)})
+            failed.append({'url': source_url, 'error': 'import failed'})
             logger.error(f"OPML import failed for {source_url}: {e}")
 
     # Invalidate feed cache

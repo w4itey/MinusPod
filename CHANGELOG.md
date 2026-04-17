@@ -48,6 +48,10 @@ This release is a coordinated security hardening pass. It includes breaking chan
 - Password minimum length raised from 8 to 12 characters. Existing password hashes verify regardless of length (grandfathered); the new minimum only applies when setting or changing. `generate_password_hash` now explicitly pins `method='scrypt'` so the hash algorithm is visible in code rather than relying on whichever default werkzeug ships.
 - `_check_ffmpeg_once` replaces the per-`AudioProcessor` `ffmpeg -version` fork with an `lru_cache`-backed module-level check. One subprocess per worker lifetime regardless of how many `AudioProcessor` instances the processing pipeline spins up.
 - `_init_server_start_time` now logs a WARN with `exc_info` when the shared status-file write fails. Previously it swallowed exceptions silently; uptime would stay worker-local and operators would not know.
+- Request bodies are capped at 10 MB via `app.config['MAX_CONTENT_LENGTH']`. The largest legitimate request in MinusPod is bulk OPML import; pure JSON endpoints can reject well below the cap with per-route checks. Requests over the cap now receive `413 Payload Too Large` before the handler sees them.
+
+### Security
+- Closed the remaining paths where raw exception strings reached API clients (flagged by CodeQL as `py/stack-trace-exposure`). `rotate_passphrase` now checks returned `ValueError` messages against a whitelist of known-safe strings before echoing them; unknown messages are logged server-side and the client receives a generic 400. Webhook template preview, webhook test, OPML import per-item failures, and bulk episode action errors replace `str(exc)` in the response body with a stable generic reason while keeping the detailed traceback in logs.
 
 ## [1.6.2] - 2026-04-15
 

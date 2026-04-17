@@ -253,6 +253,12 @@ app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = os.environ.get('SESSION_COOKIE_SAMESITE', 'Strict')
 app.config['PERMANENT_SESSION_LIFETIME'] = int(os.environ.get('SESSION_LIFETIME_HOURS', '24')) * 3600
 
+# Hard cap on request body size. Chosen to cover the largest legitimate
+# request (OPML import and patterns export round-trip both target ~10 MB);
+# pure JSON endpoints can reject well below this with per-route checks.
+# Clients receive 413 Payload Too Large automatically when exceeded.
+app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024
+
 # Enable gzip compression for responses
 compress = Compress()
 app.config['COMPRESS_MIMETYPES'] = [

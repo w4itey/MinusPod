@@ -132,10 +132,19 @@ def rotate_master_passphrase():
     except CryptoUnavailableError:
         return error_response('provider_crypto_unavailable', 409)
     except ValueError as e:
-        # secrets_crypto.rotate raises ValueError only with static, non-sensitive
-        # messages ("current passphrase mismatch", "new passphrase required",
-        # "must differ from current"). Do not relax this contract.
-        return error_response(str(e), 400)
+        # Only pass through the known static error strings documented by
+        # secrets_crypto.rotate; anything else is logged server-side and
+        # surfaced as a generic 400 so exception messages cannot leak.
+        safe_rotation_errors = {
+            "current passphrase mismatch",
+            "new passphrase required",
+            "must differ from current",
+        }
+        msg = str(e)
+        if msg in safe_rotation_errors:
+            return error_response(msg, 400)
+        logger.warning("Unexpected ValueError from rotate_passphrase: %s", e)
+        return error_response('invalid rotation request', 400)
     except Exception:
         logger.exception("provider passphrase rotation failed")
         return error_response('rotation failed', 500)

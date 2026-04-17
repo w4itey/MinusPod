@@ -738,10 +738,11 @@ def validate_webhook_template():
             'error': None,
         })
     except Exception as exc:
+        logger.warning("webhook template preview rendering failed: %s", exc)
         return json_response({
             'valid': False,
             'preview': '',
-            'error': str(exc),
+            'error': 'template rendering failed',
         })
 
 
@@ -838,5 +839,5 @@ def test_webhook(webhook_id):
         logger.error(f"Webhook test failed for {webhook_id}: {e}")
         return json_response({
             'success': False,
-            'message': str(e),
+            'message': 'webhook test failed; see server logs for details',
         })
