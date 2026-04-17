@@ -962,12 +962,6 @@ class Transcriber:
         Returns:
             Path to downloaded file, or None on failure
         """
-        try:
-            validate_url(url)
-        except SSRFError as e:
-            logger.warning(f"SSRF blocked in download_audio_with_resume: {e}")
-            return None
-
         # Generate consistent temp path based on URL hash
         url_hash = hashlib.md5(url.encode()).hexdigest()[:16]
         temp_path = os.path.join(tempfile.gettempdir(), f'podcast_dl_{url_hash}.mp3')
@@ -985,7 +979,19 @@ class Transcriber:
             headers['Range'] = f'bytes={downloaded}-'
 
         try:
-            response = requests.get(url, headers=headers, stream=True, timeout=(10, timeout))
+            response = safe_get(
+                url,
+                trust=URLTrust.FEED_CONTENT,
+                timeout=(10, timeout),
+                max_redirects=10,
+                stream=True,
+                headers=headers,
+            )
+        except SSRFError as e:
+            logger.warning(f"SSRF blocked in download_audio_with_resume: {e}")
+            return None
+
+        try:
 
             # Check if server supports range requests
             if downloaded > 0 and response.status_code == 200:

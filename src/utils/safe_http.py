@@ -182,6 +182,7 @@ def safe_post(
     timeout: float = 30,
     data=None,
     json=None,
+    files=None,
     headers: Optional[dict] = None,
 ) -> requests.Response:
     """POST ``url`` via a session that revalidates every redirect hop.
@@ -194,7 +195,12 @@ def safe_post(
     session = _RevalidatingSession(trust, max_redirects)
     try:
         return session.post(
-            url, timeout=timeout, data=data, json=json, headers=headers
+            url,
+            timeout=timeout,
+            data=data,
+            json=json,
+            files=files,
+            headers=headers,
         )
     finally:
         session.close()
