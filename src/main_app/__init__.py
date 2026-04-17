@@ -5,8 +5,10 @@ import logging
 import os
 import secrets
 import signal
+import socket
 import sys
 import threading
+import uuid
 from pathlib import Path
 
 import defusedxml
@@ -23,29 +25,50 @@ from flask_compress import Compress
 _logging_configured = False
 
 
+_HOSTNAME = os.environ.get('HOSTNAME') or socket.gethostname()
+
+
+class _RequestIDFilter(logging.Filter):
+    """Enrich log records with the current Flask request_id, if any."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            from flask import g, has_request_context
+            if has_request_context():
+                rid = getattr(g, 'request_id', None)
+                if rid:
+                    record.request_id = rid
+        except Exception:
+            pass
+        return True
+
+
 class JSONFormatter(logging.Formatter):
     """JSON log formatter for structured logging.
 
     Outputs logs as JSON objects for easier parsing by log aggregators
-    like Loki, Elasticsearch, or CloudWatch.
+    like Loki, Elasticsearch, or CloudWatch. Each line carries hostname
+    and PID to make it easier to correlate across multi-worker
+    deployments; request_id is populated from Flask ``g`` when the
+    log call happens inside an active request context (see
+    :func:`_attach_request_id`).
     """
 
     def format(self, record: logging.LogRecord) -> str:
-        """Format log record as JSON."""
         log_data = {
             'timestamp': self.formatTime(record, self.datefmt),
             'level': record.levelname,
             'logger': record.name,
             'message': record.getMessage(),
+            'hostname': _HOSTNAME,
+            'pid': os.getpid(),
         }
 
-        # Add extra fields if present
-        if hasattr(record, 'episode_id'):
-            log_data['episode_id'] = record.episode_id
-        if hasattr(record, 'slug'):
-            log_data['slug'] = record.slug
+        for attr in ('episode_id', 'slug', 'request_id'):
+            value = getattr(record, attr, None)
+            if value is not None:
+                log_data[attr] = value
 
-        # Add exception info if present
         if record.exc_info:
             log_data['exception'] = self.formatException(record.exc_info)
 
@@ -79,6 +102,10 @@ def setup_logging():
     # Console handler only - Docker captures stdout for logging
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(formatter)
+    # Stamp every record with the current Flask request_id when available
+    # so the JSON formatter's request_id field is always accurate inside
+    # request handlers.
+    console_handler.addFilter(_RequestIDFilter())
 
     # Configure root logger - clear existing handlers first to prevent duplicates
     root = logging.getLogger()
@@ -284,6 +311,26 @@ compress.init_app(app)
 from api import api as api_blueprint, init_limiter
 app.register_blueprint(api_blueprint)
 init_limiter(app)
+
+
+@app.before_request
+def _attach_request_id():
+    """Populate Flask ``g.request_id`` with either the inbound
+    ``X-Request-ID`` header or a fresh UUID hex. The value gets
+    propagated to the JSON log formatter via a filter, and echoed
+    back on the response so clients can correlate."""
+    from flask import g, request
+    inbound = request.headers.get('X-Request-ID', '').strip()
+    g.request_id = inbound[:128] if inbound else uuid.uuid4().hex[:16]
+
+
+@app.after_request
+def _echo_request_id(response):
+    from flask import g
+    rid = getattr(g, 'request_id', None)
+    if rid:
+        response.headers['X-Request-ID'] = rid
+    return response
 
 
 @app.after_request
