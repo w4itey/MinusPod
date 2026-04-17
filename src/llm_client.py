@@ -775,8 +775,13 @@ class OpenAICompatibleClient(LLMClient):
 
         url = f"{root}/api/tags"
         try:
-            import requests
-            resp = requests.get(url, timeout=10.0)
+            from utils.safe_http import URLTrust, safe_get
+            resp = safe_get(
+                url,
+                trust=URLTrust.OPERATOR_CONFIGURED,
+                timeout=10.0,
+                max_redirects=3,
+            )
             resp.raise_for_status()
             data = resp.json()
             models = []
