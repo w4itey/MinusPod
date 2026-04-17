@@ -288,15 +288,26 @@ class RSSParser:
     def generate_episode_id(self, episode_url: str, guid: str = None) -> str:
         """Generate consistent episode ID from GUID or URL.
 
-        Uses RSS GUID if available (stable identifier), falls back to URL hash.
-        This prevents duplicate episode IDs when CDNs include dynamic tracking
-        parameters in audio URLs (e.g., Megaphone's awCollectionId/awEpisodeId).
+        Uses RSS GUID if available (stable identifier), falls back to URL
+        hash. This prevents duplicate episode IDs when CDNs include
+        dynamic tracking parameters in audio URLs (e.g., Megaphone's
+        awCollectionId / awEpisodeId).
+
+        The hash is MD5 truncated to 12 hex characters. This is a
+        deduplication identifier, not a security hash; MD5's
+        cryptographic weaknesses do not apply here. The 48-bit output
+        gives a birthday-collision threshold of ~16M episodes per
+        instance, well above any real deployment scale. We keep the
+        MD5+12 scheme (rather than switching to SHA-256) because
+        changing it would invalidate every existing URL in every
+        podcast-app subscription of every MinusPod user -- a migration
+        cost no attack model justifies. The `is_valid_episode_id`
+        validator in `utils.validation` is the load-bearing contract
+        (`[0-9a-f]{12}`), not the choice of hash function.
         """
-        # Prefer GUID as it's meant to be stable per RSS spec
         if guid and guid.strip():
             clean_guid = guid.strip()
             return hashlib.md5(clean_guid.encode()).hexdigest()[:12]
-        # Fallback to URL hash for feeds without GUIDs
         return hashlib.md5(episode_url.encode()).hexdigest()[:12]
 
     def modify_feed(self, feed_content: str, slug: str, storage=None,

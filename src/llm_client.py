@@ -512,7 +512,7 @@ class OpenAICompatibleClient(LLMClient):
             if self.extra_headers:
                 kwargs['default_headers'] = self.extra_headers
             self._client = OpenAI(**kwargs)
-            logger.info(f"OpenAI-compatible client initialized (base_url: {safe_url_for_log(self.base_url)})")
+            logger.info(f"OpenAI-compatible client initialized (base_url: {safe_url_for_log(self.base_url, keep_path=True)})")
 
     def _call_with_token_param_fallback(self, model, kwargs, token_param):
         """Call the API, falling back to the alternate token parameter on 400 errors."""
@@ -650,7 +650,7 @@ class OpenAICompatibleClient(LLMClient):
             return []
 
     def get_provider_name(self) -> str:
-        return f"openai-compatible ({safe_url_for_log(self.base_url)})"
+        return f"openai-compatible ({safe_url_for_log(self.base_url, keep_path=True)})"
 
     def verify_connection(self, timeout: float = 10.0) -> bool:
         """Verify the endpoint is reachable by fetching models.
@@ -670,20 +670,20 @@ class OpenAICompatibleClient(LLMClient):
             # Try to list models - this verifies the endpoint is reachable
             response = self._client.models.list(timeout=timeout)
             models = list(response.data) if response.data else []
-            logger.info(f"LLM endpoint verified: {safe_url_for_log(self.base_url)} ({len(models)} models available)")
+            logger.info(f"LLM endpoint verified: {safe_url_for_log(self.base_url, keep_path=True)} ({len(models)} models available)")
             # Probe json_object support if not already known
             if self._get_json_format_supported() is None:
                 self.probe_json_format_support(model=models[0].id)
             return True
         except Exception as e:
-            logger.warning(f"OpenAI-compatible model list failed: {safe_url_for_log(self.base_url)} - {e}")
+            logger.warning(f"OpenAI-compatible model list failed: {safe_url_for_log(self.base_url, keep_path=True)} - {e}")
             native = self._try_ollama_native_list()
             if native:
                 logger.info(f"LLM endpoint verified via Ollama native API ({len(native)} models)")
                 if self._get_json_format_supported() is None:
                     self.probe_json_format_support(model=native[0].id)
                 return True
-            logger.error(f"LLM endpoint verification failed: {safe_url_for_log(self.base_url)} - {e}")
+            logger.error(f"LLM endpoint verification failed: {safe_url_for_log(self.base_url, keep_path=True)} - {e}")
             return False
 
     def _get_json_format_supported(self) -> Optional[bool]:
@@ -734,12 +734,12 @@ class OpenAICompatibleClient(LLMClient):
                 timeout=10.0,
             )
             self._json_format_supported = True
-            logger.info(f"Endpoint supports response_format json_object ({safe_url_for_log(self.base_url)})")
+            logger.info(f"Endpoint supports response_format json_object ({safe_url_for_log(self.base_url, keep_path=True)})")
         except BadRequestError as e:
             if 'response_format' in str(e).lower():
                 self._json_format_supported = False
                 logger.info(
-                    f"Endpoint does not support response_format json_object ({safe_url_for_log(self.base_url)}); "
+                    f"Endpoint does not support response_format json_object ({safe_url_for_log(self.base_url, keep_path=True)}); "
                     "will use prompt injection fallback"
                 )
             else:
@@ -1018,13 +1018,13 @@ def _verify_endpoint(label: str) -> bool:
     try:
         client = get_llm_client(force_new=True)
         actual_url = getattr(client, 'base_url', 'unknown')
-        logger.info(f"Verifying LLM endpoint: {safe_url_for_log(actual_url)}")
+        logger.info(f"Verifying LLM endpoint: {safe_url_for_log(actual_url, keep_path=True)}")
         if hasattr(client, 'verify_connection'):
             if not client.verify_connection(timeout=10.0):
-                logger.error(f"LLM endpoint unreachable: {safe_url_for_log(actual_url)}")
+                logger.error(f"LLM endpoint unreachable: {safe_url_for_log(actual_url, keep_path=True)}")
                 logger.error("Ad detection and chapter generation will fail until this is resolved")
                 return False
-        logger.info(f"LLM provider: {label} (verified, endpoint: {safe_url_for_log(actual_url)})")
+        logger.info(f"LLM provider: {label} (verified, endpoint: {safe_url_for_log(actual_url, keep_path=True)})")
         return True
     except Exception as e:
         logger.error(f"{label} endpoint verification failed: {e}")

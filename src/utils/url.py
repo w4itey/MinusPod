@@ -62,9 +62,12 @@ def validate_url(url: str) -> str:
     if ALLOWED_URL_PORTS and port not in ALLOWED_URL_PORTS:
         raise SSRFError(f"Blocked port: {port}")
 
-    # Resolve hostname and check all IPs
-    # TODO: DNS rebinding TOCTOU gap -- a custom requests transport adapter
-    # that pins the resolved IP would fully mitigate this but is out of scope.
+    # Resolve hostname and check all IPs.
+    # Known residual risk: DNS-rebinding TOCTOU between validation and
+    # connect. Closing it requires a custom requests HTTPAdapter that
+    # pins the resolved IP (rewriting the URL to the IP while preserving
+    # SNI via the Host header). Not implemented; tracked as a follow-up
+    # issue titled "Pin resolved IP for SSRF TOCTOU closure".
     try:
         addrinfos = socket.getaddrinfo(hostname, port, proto=socket.IPPROTO_TCP)
     except socket.gaierror:
