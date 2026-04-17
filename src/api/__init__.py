@@ -118,6 +118,16 @@ def check_auth():
     if not session.get('authenticated', False):
         return error_response('Authentication required', 401)
 
+    # Double-submit CSRF check for mutating methods. SameSite=Strict on
+    # the session cookie is the primary defense; the token header is a
+    # belt-and-suspenders layer for same-site edge cases (subdomain
+    # takeover, CNAME trust, etc.).
+    from api.csrf import validate as csrf_validate
+    csrf_err = csrf_validate(request)
+    if csrf_err:
+        logger.warning("CSRF check failed path=%s method=%s ip=%s", path, request.method, request.remote_addr)
+        return error_response(csrf_err, 403)
+
     return None
 
 

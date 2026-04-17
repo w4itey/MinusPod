@@ -287,6 +287,17 @@ init_limiter(app)
 
 
 @app.after_request
+def _apply_csrf_cookie(response):
+    """Mint a CSRF cookie alongside the session cookie so the frontend can
+    populate the X-CSRF-Token header on mutating requests. Delegated to
+    api.csrf.apply_csrf_cookie; see that module for the full contract.
+    """
+    from api.csrf import apply_csrf_cookie
+    cookie_secure = app.config.get('SESSION_COOKIE_SECURE', True)
+    return apply_csrf_cookie(response, cookie_secure)
+
+
+@app.after_request
 def _apply_security_headers(response):
     """Attach baseline security headers to every response.
 

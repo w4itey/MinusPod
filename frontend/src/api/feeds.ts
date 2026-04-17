@@ -1,4 +1,4 @@
-import { apiRequest, buildQueryString } from './client';
+import { apiRequest, buildQueryString, csrfHeaders } from './client';
 import { Feed, Episode, EpisodeDetail, BulkActionResult } from './types';
 
 export async function getFeeds(): Promise<Feed[]> {
@@ -125,9 +125,13 @@ export async function importOpml(file: File): Promise<OpmlImportResult> {
   const formData = new FormData();
   formData.append('opml', file);
 
+  // OPML import stays on raw fetch (apiRequest would JSON.stringify the
+  // FormData), but it must still carry the CSRF header so the server-side
+  // double-submit check passes.
   const response = await fetch('/api/v1/feeds/import-opml', {
     method: 'POST',
     body: formData,
+    headers: csrfHeaders('POST'),
   });
 
   if (!response.ok) {
