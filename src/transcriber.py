@@ -14,6 +14,7 @@ from utils.time import format_vtt_timestamp
 from utils.gpu import clear_gpu_memory, get_available_memory_gb, get_gpu_memory_info
 from utils.http import post_with_retry, safe_url_for_log
 from utils.url import validate_url, SSRFError
+from utils.safe_http import URLTrust, safe_get
 from config import (
     API_CHUNK_DURATION_SECONDS,
     WHISPER_BACKEND_LOCAL,
@@ -906,20 +907,26 @@ class Transcriber:
             timeout: (connect_timeout, read_timeout) in seconds
         """
         try:
-            validate_url(url)
-        except SSRFError as e:
-            logger.warning(f"SSRF blocked in download_audio: {e}")
-            return None
-
-        try:
             logger.info(f"Downloading audio from: {url}")
             headers = {
                 'User-Agent': BROWSER_USER_AGENT,
                 'Accept': '*/*',
                 'Accept-Language': 'en-US,en;q=0.9',
             }
-            response = requests.get(url, headers=headers, stream=True, timeout=timeout)
+            response = safe_get(
+                url,
+                trust=URLTrust.FEED_CONTENT,
+                timeout=timeout,
+                max_redirects=10,
+                stream=True,
+                headers=headers,
+            )
             response.raise_for_status()
+        except SSRFError as e:
+            logger.warning(f"SSRF blocked in download_audio: {e}")
+            return None
+
+        try:
 
             # Check file size
             content_length = response.headers.get('Content-Length')
