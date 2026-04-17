@@ -190,6 +190,46 @@ try:
 except Exception as e:
     audio_logger.warning(f"Sponsor extraction failed: {e}")
 
+def _validate_configured_base_urls():
+    """Best-effort sanity check on operator-configured base URLs.
+
+    Runs once at startup. Any env var or DB setting that holds a URL the
+    SSRF validator would refuse surfaces at ERROR so an operator sees the
+    problem during deploy instead of at the first outbound call. A failure
+    never aborts startup; the fetch-time validators catch the same URL
+    when it is actually used.
+    """
+    from utils.url import validate_base_url, SSRFError
+    checks = [
+        ('env:OPENAI_BASE_URL', os.environ.get('OPENAI_BASE_URL')),
+        ('env:WHISPER_API_BASE_URL', os.environ.get('WHISPER_API_BASE_URL')),
+        ('env:OPENROUTER_BASE_URL', os.environ.get('OPENROUTER_BASE_URL')),
+        ('env:ANTHROPIC_BASE_URL', os.environ.get('ANTHROPIC_BASE_URL')),
+    ]
+    try:
+        db_settings = db.get_all_settings()
+    except Exception:
+        db_settings = {}
+    for key in ('openai_base_url', 'whisper_api_base_url'):
+        entry = db_settings.get(key)
+        if isinstance(entry, dict) and entry.get('value'):
+            checks.append((f"db:{key}", entry['value']))
+
+    for source, url in checks:
+        if not url:
+            continue
+        try:
+            validate_base_url(url)
+        except SSRFError as exc:
+            audio_logger.error(
+                "Configured base URL failed SSRF validation at startup: source=%s url=%s reason=%s",
+                source, url, exc,
+            )
+
+
+_validate_configured_base_urls()
+
+
 # Re-encrypt any legacy plaintext provider secrets under the current
 # master passphrase. Idempotent on ``enc:v1:`` rows and no-op when there
 # is no plaintext to migrate, so racing gunicorn workers cannot corrupt
@@ -333,6 +373,36 @@ _init_sentry()
 
 # Initialize Flask app
 app = Flask(__name__)
+
+# Reverse-proxy awareness. Cloudflare + cloudflared puts the real client IP
+# in X-Forwarded-For, so request.remote_addr is otherwise the tunnel's
+# loopback hop. The lockout logic in api/auth.py keys its decision on
+# remote_addr; without ProxyFix, every failed login looks like it came
+# from 127.0.0.1 and lockout never fires. Configure via
+# MINUSPOD_TRUSTED_PROXY_COUNT=1 (most single-proxy setups) or higher.
+_trusted_proxies = int(os.environ.get('MINUSPOD_TRUSTED_PROXY_COUNT', '0') or 0)
+if _trusted_proxies > 0:
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(
+        app.wsgi_app,
+        x_for=_trusted_proxies,
+        x_proto=_trusted_proxies,
+        x_host=_trusted_proxies,
+    )
+    audio_logger.info(
+        "ProxyFix enabled: trusting %d reverse proxy hops", _trusted_proxies,
+    )
+else:
+    # Docker deployments behind a proxy typically need this; a loud warn
+    # on startup saves a support round-trip when lockout appears not to
+    # work.
+    if os.environ.get('DOCKER_CONTAINER') or os.path.exists('/.dockerenv'):
+        audio_logger.warning(
+            "Running in a container without MINUSPOD_TRUSTED_PROXY_COUNT set; "
+            "remote_addr will reflect the proxy hop, not the real client. "
+            "Login lockout decisions will be inaccurate behind Cloudflare / "
+            "nginx unless you set MINUSPOD_TRUSTED_PROXY_COUNT."
+        )
 
 # Session configuration for authentication
 app.secret_key = os.environ.get('SECRET_KEY') or get_or_create_secret_key()
