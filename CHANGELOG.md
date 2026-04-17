@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - 2.0.0 (security audit)
+## [2.0.0] - 2026-04-17 (security audit)
 
 This release is a coordinated security hardening pass. It includes breaking changes to the CORS posture, cross-provider API-key fallback, and sponsor-normalization request shape; operators should read the upgrade notes before deploying. Individual findings are grouped by P-tier here; the full audit plan lives in `tmp/MinusPod_Audit_Remediation_Plan.md`.
 
