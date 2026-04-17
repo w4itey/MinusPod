@@ -489,6 +489,7 @@ function Settings() {
         logout={logout}
         refreshStatus={refreshStatus}
         cryptoReady={providersState?.cryptoReady ?? false}
+        plaintextSecretsCount={status?.security?.plaintextSecretsCount ?? 0}
       />
 
       {/* Error display */}
