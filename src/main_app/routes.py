@@ -4,7 +4,7 @@ import logging
 import os
 import time
 from datetime import datetime, timezone
-from functools import wraps
+from functools import lru_cache, wraps
 from pathlib import Path
 
 import requests
@@ -177,27 +177,35 @@ def register_routes(app):
 </body>
 </html>'''
 
+    @lru_cache(maxsize=1)
+    def _render_openapi_yaml(openapi_path_str: str, version: str) -> str:
+        """Cache the version-substituted OpenAPI document for the lifetime of
+        the worker. Both key components are stable within a process, so the
+        cache invalidates naturally on container restart (when a version
+        bump or file change takes effect).
+        """
+        import re
+        content = Path(openapi_path_str).read_text()
+        return re.sub(
+            r'^(\s*version:\s*).*$',
+            rf'\g<1>{version}',
+            content,
+            count=1,
+            flags=re.MULTILINE,
+        )
+
     @app.route('/openapi.yaml')
     def serve_openapi():
         """Serve OpenAPI specification with dynamic version."""
         openapi_path = ROOT_DIR / 'openapi.yaml'
-        if openapi_path.exists():
-            try:
-                from version import __version__
-                import re
-                content = openapi_path.read_text()
-                # Replace version line dynamically
-                content = re.sub(
-                    r'^(\s*version:\s*).*$',
-                    rf'\g<1>{__version__}',
-                    content,
-                    count=1,
-                    flags=re.MULTILINE
-                )
-                return Response(content, mimetype='application/x-yaml')
-            except Exception:
-                return send_file(openapi_path, mimetype='application/x-yaml')
-        abort(404)
+        if not openapi_path.exists():
+            abort(404)
+        try:
+            from version import __version__
+            content = _render_openapi_yaml(str(openapi_path), __version__)
+            return Response(content, mimetype='application/x-yaml')
+        except Exception:
+            return send_file(openapi_path, mimetype='application/x-yaml')
 
     # ========== Browser Icon Routes ==========
     # Short-circuit favicon/apple-touch-icon requests so they don't fall through
