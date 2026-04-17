@@ -10,7 +10,6 @@ import threading
 from pathlib import Path
 
 from flask import Flask
-from flask_cors import CORS
 from flask_compress import Compress
 
 # Configure structured logging
@@ -242,9 +241,9 @@ app = Flask(__name__)
 
 # Session configuration for authentication
 app.secret_key = os.environ.get('SECRET_KEY') or get_or_create_secret_key()
-app.config['SESSION_COOKIE_SECURE'] = os.environ.get('SESSION_COOKIE_SECURE', 'false').lower() == 'true'
+app.config['SESSION_COOKIE_SECURE'] = os.environ.get('SESSION_COOKIE_SECURE', 'true').lower() == 'true'
 app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SAMESITE'] = os.environ.get('SESSION_COOKIE_SAMESITE', 'Strict')
 app.config['PERMANENT_SESSION_LIFETIME'] = int(os.environ.get('SESSION_LIFETIME_HOURS', '24')) * 3600
 
 # Enable gzip compression for responses
@@ -261,19 +260,50 @@ app.config['COMPRESS_LEVEL'] = 6  # Balance between speed and compression
 app.config['COMPRESS_MIN_SIZE'] = 500  # Only compress responses > 500 bytes
 compress.init_app(app)
 
-# Enable CORS for development (Vite dev server)
-CORS(app, resources={
-    r"/api/*": {
-        "origins": ["http://localhost:5173", "http://localhost:3000", "http://localhost:8080"],
-        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type"]
-    }
-})
+# CORS is intentionally NOT enabled. MinusPod is single-origin (browser
+# talks to the same host that serves the API); the Vite dev server at
+# :5173 proxies /api/* to :8000, so cross-origin requests never reach
+# the Python process in practice. Removing flask-cors closes an
+# allow-credentials-from-any-origin footgun and simplifies the
+# middleware stack.
 
 # Import and register API blueprint
 from api import api as api_blueprint, init_limiter
 app.register_blueprint(api_blueprint)
 init_limiter(app)
+
+
+@app.after_request
+def _apply_security_headers(response):
+    """Attach baseline security headers to every response.
+
+    HSTS is only meaningful over HTTPS and would break clients that hit the
+    instance on plain HTTP for recovery, so it is opt-in via env. CSP is
+    scoped to HTML responses so RSS, VTT, and JSON payloads are not given
+    a policy they cannot meaningfully enforce; the Content-Type check
+    avoids emitting CSP on podcast-app consumer endpoints.
+    """
+    response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    response.headers.setdefault('X-Frame-Options', 'DENY')
+    response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+    if os.environ.get('MINUSPOD_ENABLE_HSTS', 'false').lower() == 'true':
+        response.headers.setdefault(
+            'Strict-Transport-Security',
+            'max-age=31536000; includeSubDomains'
+        )
+    content_type = (response.headers.get('Content-Type') or '').split(';', 1)[0].strip().lower()
+    if content_type == 'text/html':
+        response.headers.setdefault(
+            'Content-Security-Policy',
+            "default-src 'self'; "
+            "script-src 'self'; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src 'self' https://fonts.gstatic.com; "
+            "img-src 'self' data: https:; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none'"
+        )
+    return response
 
 # Register routes from routes module
 from main_app.routes import register_routes

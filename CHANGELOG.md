@@ -29,6 +29,12 @@ This release is a coordinated security hardening pass. It includes breaking chan
 ### Fixed
 - `validate_base_url` now rejects literal cloud metadata IPs (`169.254.169.254`, `168.63.129.16`). The scheme-plus-hostname check previously admitted them because backend URLs are intentionally allowed to target loopback and private hosts; admin-typed URLs still get that latitude, but the IMDS pivot is now closed regardless. The SSRF fetcher landing in a later commit supersedes this with DNS-rebinding defense and a full trust-tier model.
 
+### Security
+- **Breaking:** `SESSION_COOKIE_SECURE` now defaults to `true`. Deployments serving over plain HTTP must explicitly set `SESSION_COOKIE_SECURE=false` or sessions will fail to round-trip.
+- **Breaking:** `SESSION_COOKIE_SAMESITE` now defaults to `Strict` (was `Lax`). The instance has no cross-site login flows, so Strict closes the residual top-level-form CSRF vector without UX cost. Override with the `SESSION_COOKIE_SAMESITE` env var if an operator needs `Lax` for a specific integration.
+- **Breaking:** removed `flask-cors` and the `/api/*` CORS block. The Vite dev server already proxies to the backend and production traffic is same-origin; shipping an `allow-credentials`-capable CORS header was a footgun in wait. Any operator who currently serves the frontend from a distinct origin must put it behind the same reverse proxy.
+- Every response now ships `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and `Referrer-Policy: strict-origin-when-cross-origin`. HTML responses additionally ship a Content Security Policy scoped to the UI's static assets and Google Fonts. `Strict-Transport-Security: max-age=31536000; includeSubDomains` is opt-in via `MINUSPOD_ENABLE_HSTS=true` so the header is not emitted by deployments reachable on plain HTTP.
+
 ## [1.6.2] - 2026-04-15
 
 ### Added
