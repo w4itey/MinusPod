@@ -116,6 +116,8 @@ RUN find ./src -type f -name '*.py' -exec chmod 644 {} \; && \
     find ./static/ui -type d -exec chmod 755 {} \; && \
     chmod 755 /app/entrypoint.sh && \
     mkdir -p /app/data && \
+    (getent passwd ubuntu && userdel -r ubuntu 2>/dev/null || true) && \
+    (getent group ubuntu && groupdel ubuntu 2>/dev/null || true) && \
     groupadd --system --gid 1000 minuspod && \
     useradd --system --uid 1000 --gid minuspod --home-dir /app/data \
             --shell /sbin/nologin minuspod && \

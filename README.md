@@ -10,6 +10,7 @@ MinusPod is a self-hosted server that removes ads before you ever hit play. It t
 - [Advanced Features (Quick Reference)](#advanced-features-quick-reference)
 - [Requirements](#requirements)
 - [Quick Start](#quick-start)
+- [Upgrading to 2.0](#upgrading-to-20)
 - [Web Interface](#web-interface)
   - [Ad Editor Workflow](#ad-editor-workflow)
   - [Screenshots](#screenshots)
@@ -206,6 +207,18 @@ docker-compose up -d
 ```
 
 Access the web UI at `http://localhost:8000/ui/` to add and manage feeds.
+
+## Upgrading to 2.0
+
+2.0.0 is a coordinated security hardening release. The full details are in `CHANGELOG.md`; the short list of things operators need to know:
+
+- **Session cookies tighten by default.** `SESSION_COOKIE_SECURE` defaults to `true`. Plain-HTTP deployments must set `SESSION_COOKIE_SECURE=false` explicitly.
+- **SameSite becomes Strict.** The session cookie is now `SameSite=Strict` by default. Operators with an integration that needs `Lax` can set `SESSION_COOKIE_SAMESITE=Lax`.
+- **Frontend and backend must be same-origin.** The `flask-cors` middleware was removed; cross-origin credential-bearing requests will no longer succeed. Serve the UI behind the same reverse proxy as the API.
+- **CSRF token required on every mutating request.** The frontend injects it automatically; third-party API clients must read the `minuspod_csrf` cookie and echo it in an `X-CSRF-Token` header on non-GET requests.
+- **Login lockout.** After 5 failed attempts from the same public IP in 15 minutes, that IP is locked out for 15 minutes. Behind Cloudflare / nginx, set `MINUSPOD_TRUSTED_PROXY_COUNT=1` so the lockout keys on the real client IP instead of the proxy hop.
+- **No more OPENAI_API_KEY -> ANTHROPIC_API_KEY fallback.** Deployments running an OpenAI-compatible provider must set `OPENAI_API_KEY` explicitly; a startup WARN fires when the old env-var shape is detected.
+- **Container runs as UID 1000.** First-boot chown migrates volume ownership. Set `APP_UID` / `APP_GID` if your host volume belongs to a different UID.
 
 ## Web Interface
 
