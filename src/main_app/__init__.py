@@ -9,6 +9,13 @@ import sys
 import threading
 from pathlib import Path
 
+import defusedxml
+# Neutralize DTD/external-entity expansion in every stdlib XML parser
+# (xml.etree.ElementTree, xml.sax, xml.dom.minidom, xml.dom.pulldom)
+# before anything else imports them. feedparser routes namespace
+# handling through xml.sax, so this also hardens RSS ingestion.
+defusedxml.defuse_stdlib()
+
 from flask import Flask
 from flask_compress import Compress
 

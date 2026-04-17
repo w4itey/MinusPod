@@ -9,8 +9,31 @@ import shutil
 
 from config import BROWSER_USER_AGENT
 from utils.url import validate_url, SSRFError
+from utils.validation import is_dangerous_slug, is_valid_episode_id
 
 logger = logging.getLogger(__name__)
+
+
+class PathContainmentError(ValueError):
+    """Raised when a slug or episode_id would resolve outside the storage root."""
+
+
+def _safe_join_under(base: Path, *parts: str) -> Path:
+    """Join ``parts`` under ``base`` and verify the result stays inside ``base``.
+
+    Uses ``resolve()`` + ``relative_to()`` so symlink and ``..`` tricks raise
+    rather than silently escaping. The base is assumed to already exist; the
+    joined path may or may not.
+    """
+    base_resolved = base.resolve()
+    joined = base_resolved.joinpath(*parts).resolve()
+    try:
+        joined.relative_to(base_resolved)
+    except ValueError as exc:
+        raise PathContainmentError(
+            f"path {joined!r} escapes storage root {base_resolved!r}"
+        ) from exc
+    return joined
 
 
 class Storage:
@@ -31,8 +54,14 @@ class Storage:
         logger.info(f"Storage initialized with data_dir: {self.data_dir}")
 
     def get_podcast_dir(self, slug: str) -> Path:
-        """Get podcast directory, creating if necessary."""
-        podcast_dir = self.podcasts_dir / slug
+        """Get podcast directory, creating if necessary.
+
+        Validates ``slug`` against traversal patterns and confirms the
+        resolved path stays under ``self.podcasts_dir``.
+        """
+        if is_dangerous_slug(slug):
+            raise PathContainmentError(f"refusing dangerous slug {slug!r}")
+        podcast_dir = _safe_join_under(self.podcasts_dir, slug)
         podcast_dir.mkdir(exist_ok=True)
 
         # Ensure episodes directory exists
@@ -108,15 +137,26 @@ class Storage:
 
         logger.debug(f"[{slug}] Saved data to database")
 
+    def _validated_episode_leaf(self, slug: str, episode_id: str, filename: str) -> Path:
+        """Return a resolved path inside the episodes directory for ``slug``.
+
+        Validates ``episode_id`` shape so a malicious filename cannot escape
+        the per-podcast episodes directory via ``..`` or absolute paths.
+        """
+        if not is_valid_episode_id(episode_id):
+            raise PathContainmentError(f"refusing invalid episode id {episode_id!r}")
+        podcast_dir = self.get_podcast_dir(slug)
+        return _safe_join_under(podcast_dir, "episodes", filename)
+
     def get_episode_path(self, slug: str, episode_id: str, extension: str = ".mp3") -> Path:
         """Get path for episode file."""
-        podcast_dir = self.get_podcast_dir(slug)
-        return podcast_dir / "episodes" / f"{episode_id}{extension}"
+        return self._validated_episode_leaf(slug, episode_id, f"{episode_id}{extension}")
 
     def get_original_path(self, slug: str, episode_id: str, extension: str = ".mp3") -> Path:
         """Get path for the retained original (pre-cut) audio file."""
-        podcast_dir = self.get_podcast_dir(slug)
-        return podcast_dir / "episodes" / f"{episode_id}-original{extension}"
+        return self._validated_episode_leaf(
+            slug, episode_id, f"{episode_id}-original{extension}"
+        )
 
     def save_rss(self, slug: str, content: str) -> None:
         """Save modified RSS feed to filesystem."""
