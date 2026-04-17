@@ -8,7 +8,7 @@ import math
 from flask import request, Response
 
 from api import (
-    api, log_request, json_response,
+    api, limiter, log_request, json_response,
     get_database,
 )
 
@@ -98,9 +98,14 @@ def get_processing_history_stats():
 
 
 @api.route('/history/export', methods=['GET'])
+@limiter.limit("5 per hour")
 @log_request
 def export_processing_history():
-    """Export processing history as CSV or JSON."""
+    """Export processing history as CSV or JSON.
+
+    Rate-limited because the export buffers the full history table into
+    memory before serialising; unbounded polling could OOM the worker.
+    """
     db = get_database()
 
     # Parse query params

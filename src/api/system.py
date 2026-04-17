@@ -19,19 +19,32 @@ logger = logging.getLogger('podcast.api')
 
 # ========== System Endpoints ==========
 
+@api.route('/health/live', methods=['GET'])
+def health_live():
+    """Liveness probe: answers 200 if the process is running. No side effects.
+
+    Safe for per-second polling by Kubernetes-style liveness probes and for
+    health checks on shared hosts where the full readiness check is too
+    heavy. Does not require authentication.
+    """
+    return jsonify({'status': 'ok'}), 200
+
+
 @api.route('/health', methods=['GET'])
 def health_check():
-    """Health check endpoint for monitoring.
+    """Readiness probe: verifies DB and storage are reachable.
 
-    Returns 200 if healthy, 503 if unhealthy.
-    Does not require authentication.
+    Returns 200 if healthy, 503 if unhealthy. Does not require authentication.
+    Dropped the ProcessingQueue instantiation that previously ran on every
+    call; a busy queue is not an ill-health signal, and the construction
+    opened a file lock that showed up in profiles. Existing Docker / Portainer
+    healthchecks that poll /health continue to receive the same 200/503 shape.
     """
     db = get_database()
     storage = get_storage()
 
     checks = {}
 
-    # Database check
     try:
         conn = db.get_connection()
         conn.execute('SELECT 1')
@@ -39,32 +52,19 @@ def health_check():
     except Exception:
         checks['database'] = False
 
-    # Storage check - verify data directory is writable
     try:
         storage_path = storage.data_dir
         checks['storage'] = os.access(storage_path, os.W_OK)
     except Exception:
         checks['storage'] = False
 
-    # Processing queue check
-    try:
-        from processing_queue import ProcessingQueue
-        queue = ProcessingQueue()
-        checks['queue_available'] = not queue.is_busy()
-    except Exception:
-        checks['queue_available'] = False
+    status = 'healthy' if all(checks.values()) else 'unhealthy'
 
-    # Determine overall status - database and storage are critical
-    critical_checks = [checks['database'], checks['storage']]
-    status = 'healthy' if all(critical_checks) else 'unhealthy'
-
-    response_data = {
+    return jsonify({
         'status': status,
         'checks': checks,
         'version': _get_version()
-    }
-
-    return jsonify(response_data), 200 if status == 'healthy' else 503
+    }), 200 if status == 'healthy' else 503
 
 
 @api.route('/system/status', methods=['GET'])
@@ -145,15 +145,29 @@ def refresh_model_pricing():
 
 
 @api.route('/system/cleanup', methods=['POST'])
+@limiter.limit("1 per hour")
 @log_request
 def trigger_cleanup():
-    """Reset ALL processed episodes to discovered (ignores retention period)."""
+    """Reset ALL processed episodes to discovered (ignores retention period).
+
+    Rate-limited to one invocation per hour and audit-logged at WARN so the
+    destructive reset shows up in operator dashboards even when the request
+    completes successfully. The API-only threat model assumes deliberate
+    intent; the limit is a brake on runaway scripts rather than on people.
+    """
     db = get_database()
     storage = get_storage()
 
+    logger.warning(
+        "Destructive cleanup triggered: all episodes will be reset to discovered ip=%s",
+        request.remote_addr,
+    )
     reset_count, freed_mb = db.cleanup_old_episodes(force_all=True, storage=storage)
 
-    logger.info(f"Manual cleanup: {reset_count} episodes reset, {freed_mb:.1f} MB freed")
+    logger.warning(
+        "Destructive cleanup complete: %d episodes reset, %.1f MB freed ip=%s",
+        reset_count, freed_mb, request.remote_addr,
+    )
     return json_response({
         'message': 'All episodes reset to discovered',
         'episodesRemoved': reset_count,
@@ -194,12 +208,16 @@ def get_queue_status():
 
 
 @api.route('/system/queue', methods=['DELETE'])
+@limiter.limit("6 per hour")
 @log_request
 def clear_queue():
     """Clear all pending items from the auto-process queue."""
     db = get_database()
     deleted = db.clear_pending_queue_items()
-    logger.info(f"Cleared {deleted} pending items from auto-process queue")
+    logger.warning(
+        "Auto-process queue cleared: %d pending items removed ip=%s",
+        deleted, request.remote_addr,
+    )
     return json_response({
         'message': f'Cleared {deleted} pending items from queue',
         'deleted': deleted

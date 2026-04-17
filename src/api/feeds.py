@@ -53,17 +53,18 @@ def list_feeds():
 
 
 @api.route('/feeds', methods=['POST'])
-@limiter.limit("10 per minute")
+@limiter.limit("3 per minute")
 @log_request
 def add_feed():
-    """Add a new podcast feed."""
+    """Add a new podcast feed.
+
+    OPML bulk-import lives on its own endpoint with its own limiter, so the
+    feeds POST limit is tuned for interactive use.
+    """
     data = request.get_json()
 
-    # Debug logging for request data
-    logger.debug(f"Add feed request data: {data}")
-
     if not data or 'sourceUrl' not in data:
-        logger.warning(f"Missing sourceUrl in request. Data received: {data}")
+        logger.warning("Missing sourceUrl in POST /feeds request")
         return error_response('sourceUrl is required', 400)
 
     source_url = data['sourceUrl'].strip()

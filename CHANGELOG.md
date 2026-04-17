@@ -36,6 +36,15 @@ This release is a coordinated security hardening pass. It includes breaking chan
 - Every response now ships `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and `Referrer-Policy: strict-origin-when-cross-origin`. HTML responses additionally ship a Content Security Policy scoped to the UI's static assets and Google Fonts. `Strict-Transport-Security: max-age=31536000; includeSubDomains` is opt-in via `MINUSPOD_ENABLE_HSTS=true` so the header is not emitted by deployments reachable on plain HTTP.
 - `Storage.get_podcast_dir`, `get_episode_path`, and `get_original_path` now validate their inputs with `utils.validation.is_dangerous_slug` and `is_valid_episode_id` and verify the resolved path stays inside the storage root via `resolve() + relative_to()`. Traversal payloads (`..`, URL-encoded variants, slashes, backslashes, null bytes) now raise `PathContainmentError` instead of silently resolving outside `/app/data/podcasts/`. Episode IDs are required to match the 12-char MD5 hex shape the ingestion pipeline actually produces.
 - `defusedxml.defuse_stdlib()` is called at the top of `main_app/__init__.py` before any XML-using module imports. Stdlib XML parsers (`xml.etree.ElementTree`, `xml.sax`, `xml.dom.minidom`, `xml.dom.pulldom`) now reject DTDs, entity bombs, and external references, which hardens both `feedparser`-backed RSS ingestion and OPML import.
+- `POST /api/v1/system/cleanup` is now rate-limited to `1 per hour` and emits a WARN audit log on both entry and completion, including the source IP. The endpoint resets every processed episode to discovered; the rate limit is a brake on runaway automation while still leaving deliberate operator use unhindered.
+- `DELETE /api/v1/system/queue` is now rate-limited to `6 per hour` and logs the count of cleared items at WARN.
+- `GET /api/v1/history/export` is now rate-limited to `5 per hour`. The export buffers the full history table into memory before serialising; unbounded polling could OOM a worker.
+- `POST /api/v1/feeds` rate limit tightened from `10/min` to `3/min`. Bulk OPML import runs on its own endpoint with its own limiter, so single-feed POSTs do not need the bulk ceiling.
+
+### Changed
+- `/api/v1/health` no longer instantiates `ProcessingQueue`. The queue check opened a file lock and regressed latency for frequent Docker health polls without giving any additional ill-health signal. The endpoint still reports `{database, storage}` status with the same 200/503 semantics so existing Docker and Portainer health checks keep working.
+- Added `GET /api/v1/health/live` for Kubernetes-style liveness probes. Returns `{"status": "ok"}` unconditionally and has no side effects; safe for per-second polling.
+- `POST /api/v1/feeds` no longer logs the full request body at DEBUG. Missing-field warnings log only the fact of the miss, not the received payload.
 
 ## [1.6.2] - 2026-04-15
 
