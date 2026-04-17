@@ -9,14 +9,19 @@ The feature is locked when ``MINUSPOD_MASTER_PASSPHRASE`` is unset;
 callers must check ``is_available()`` or handle ``CryptoUnavailableError``.
 """
 import base64
+import datetime
 import logging
 import os
 import secrets
 import threading
+import uuid
+from pathlib import Path
 
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
+from utils.db_backup import snapshot_database
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +31,23 @@ _PBKDF2_ITERATIONS = 600_000
 _KEY_LEN = 32
 _SALT_LEN = 16
 _NONCE_LEN = 12
+
+# Settings keys that must always be stored encrypted.
+# ``flask_secret_key`` and webhook HMAC secrets are tracked separately
+# (bootstrap ordering requires them to read before crypto is available).
+SECRET_SETTING_KEYS = frozenset(
+    {
+        "anthropic_api_key",
+        "openai_api_key",
+        "openrouter_api_key",
+        "ollama_api_key",
+        "whisper_api_key",
+        "podcast_index_api_key",
+        "podcast_index_api_secret",
+    }
+)
+
+BACKUP_DIR = Path(os.environ.get("MINUSPOD_DATA_DIR", "/app/data")) / "backups"
 
 _lock = threading.Lock()
 _dek_cache: bytes | None = None
@@ -195,3 +217,89 @@ def decrypt(db, envelope: str) -> str:
         raise ValueError("malformed ciphertext envelope") from exc
     dek = _derive_dek(db)
     return AESGCM(dek).decrypt(nonce, ct, None).decode("utf-8")
+
+
+def _iter_plaintext_secret_rows(db):
+    """Yield ``(key, value)`` pairs for known secret keys that still hold
+    legacy plaintext (value present, envelope prefix absent)."""
+    for key, info in db.get_all_settings().items():
+        if key not in SECRET_SETTING_KEYS:
+            continue
+        value = info.get("value") if isinstance(info, dict) else None
+        if not value or is_ciphertext(value):
+            continue
+        yield key, value
+
+
+def count_plaintext_secrets(db) -> int:
+    """Report how many known secret keys are still stored as plaintext.
+
+    Counts regardless of crypto availability so ``/system/status`` can
+    surface "you have N plaintext rows, crypto is not configured"
+    instead of silently reporting zero.
+    """
+    return sum(1 for _ in _iter_plaintext_secret_rows(db))
+
+
+def _create_pre_migration_backup(db) -> str:
+    """Snapshot the live SQLite database to ``BACKUP_DIR``.
+
+    Uses PID plus a short UUID suffix in the filename so two gunicorn
+    workers racing at the same wall-clock second don't clobber each
+    other's backup. Tight file permissions are set by ``snapshot_database``.
+    Raises ``OSError`` if the backup cannot be written.
+    """
+    ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    suffix = f"{os.getpid()}-{uuid.uuid4().hex[:6]}"
+    backup_path = BACKUP_DIR / f"pre-secret-migration-{ts}-{suffix}.db"
+    return snapshot_database(db, backup_path)
+
+
+def migrate_plaintext_secrets(db) -> dict:
+    """Re-encrypt legacy plaintext rows in ``SECRET_SETTING_KEYS``.
+
+    Idempotent: rows that already start with the ``enc:v1:`` envelope are
+    skipped. When crypto is unavailable the migration is a no-op (the
+    rows cannot be encrypted without ``MINUSPOD_MASTER_PASSPHRASE``); a
+    single WARN surfaces so operators know to set it.
+
+    A mandatory pre-migration backup is written before any writes happen;
+    if the backup raises, the whole migration is aborted so plaintext
+    stays on disk (recoverable) rather than being silently overwritten.
+    """
+    result = {"migrated": 0, "skipped": 0, "backup_path": None}
+
+    if not is_available():
+        logger.warning(
+            "plaintext secret migration skipped: MINUSPOD_MASTER_PASSPHRASE "
+            "is not set; set it and restart to encrypt provider keys at rest"
+        )
+        return result
+
+    plaintext_rows = list(_iter_plaintext_secret_rows(db))
+    if not plaintext_rows:
+        return result
+
+    try:
+        result["backup_path"] = _create_pre_migration_backup(db)
+    except OSError:
+        logger.exception(
+            "pre-migration backup failed; aborting to preserve plaintext rows"
+        )
+        return result
+
+    for key, plaintext in plaintext_rows:
+        try:
+            db.set_secret(key, plaintext)
+            result["migrated"] += 1
+        except Exception:
+            logger.exception("failed to encrypt legacy secret %s", key)
+            result["skipped"] += 1
+
+    logger.warning(
+        "plaintext secret migration complete: migrated=%d skipped=%d backup=%s",
+        result["migrated"],
+        result["skipped"],
+        result["backup_path"],
+    )
+    return result

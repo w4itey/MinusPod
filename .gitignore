@@ -157,7 +157,9 @@ static/
 *.pfx
 *secret*
 !src/secrets_crypto.py
+!src/utils/secret_writes.py
 !tests/unit/test_secrets_crypto.py
+!tests/unit/test_secrets_migration.py
 *password*
 cookies.txt
 

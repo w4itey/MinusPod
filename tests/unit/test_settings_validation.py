@@ -11,6 +11,7 @@ import pytest
 _test_data_dir = tempfile.mkdtemp(prefix='settings_test_')
 os.environ['SECRET_KEY'] = 'test-secret'
 os.environ['DATA_DIR'] = _test_data_dir
+os.environ['MINUSPOD_MASTER_PASSPHRASE'] = 'settings-validation-test-passphrase'
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
 

@@ -12,6 +12,7 @@ from flask import request
 from api import api, error_response, json_response
 from database import Database
 from secrets_crypto import CryptoUnavailableError, is_available as crypto_available, rotate as rotate_passphrase
+from utils.secret_writes import SecretWriteRejected, set_or_clear_secret
 from utils.url import validate_base_url, SSRFError
 
 logger = logging.getLogger(__name__)
@@ -71,12 +72,12 @@ def update_provider(provider):
 
     if 'apiKey' in body:
         api_key = body['apiKey']
-        if api_key is None or api_key == '':
-            db.clear_secret(cfg['secret'])
-        elif isinstance(api_key, str):
-            db.set_secret(cfg['secret'], api_key.strip())
-        else:
+        if api_key is not None and not isinstance(api_key, str):
             return error_response('apiKey must be a string or null', 400)
+        try:
+            set_or_clear_secret(db, cfg['secret'], api_key)
+        except SecretWriteRejected:
+            return error_response('provider_crypto_unavailable', 409)
 
     if cfg['base_url'] and 'baseUrl' in body:
         url = body['baseUrl']

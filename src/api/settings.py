@@ -23,6 +23,7 @@ from llm_client import (
 )
 from utils.url import validate_url, validate_base_url, SSRFError
 from utils.http import safe_url_for_log
+from utils.secret_writes import SecretWriteRejected, set_or_clear_secret
 from webhook_service import render_template_preview, fire_test_event, load_webhooks, VALID_EVENTS
 
 logger = logging.getLogger('podcast.api')
@@ -237,7 +238,10 @@ def update_ad_detection_settings():
         key = data['openrouterApiKey'].strip()
         if key and not key.startswith('sk-or-'):
             return json_response({'error': 'OpenRouter API key must start with sk-or-'}, 400)
-        db.set_setting('openrouter_api_key', key, is_default=False)
+        try:
+            set_or_clear_secret(db, 'openrouter_api_key', key)
+        except SecretWriteRejected:
+            return error_response('provider_crypto_unavailable', 409)
         logger.info("Updated OpenRouter API key")
         provider_changed = True
 
@@ -285,7 +289,10 @@ def update_ad_detection_settings():
         logger.info(f"Updated whisper API base URL to: {data['whisperApiBaseUrl']}")
 
     if 'whisperApiKey' in data:
-        db.set_setting('whisper_api_key', data['whisperApiKey'], is_default=False)
+        try:
+            set_or_clear_secret(db, 'whisper_api_key', data['whisperApiKey'])
+        except SecretWriteRejected:
+            return error_response('provider_crypto_unavailable', 409)
         logger.info("Updated whisper API key")
 
     if 'whisperApiModel' in data:
@@ -305,11 +312,17 @@ def update_ad_detection_settings():
         logger.info(f"Updated whisper language to: {lang_val or 'en'}")
 
     if 'podcastIndexApiKey' in data:
-        db.set_setting('podcast_index_api_key', data['podcastIndexApiKey'].strip(), is_default=False)
+        try:
+            set_or_clear_secret(db, 'podcast_index_api_key', data['podcastIndexApiKey'])
+        except SecretWriteRejected:
+            return error_response('provider_crypto_unavailable', 409)
         logger.info("Updated Podcast Index API key")
 
     if 'podcastIndexApiSecret' in data:
-        db.set_setting('podcast_index_api_secret', data['podcastIndexApiSecret'].strip(), is_default=False)
+        try:
+            set_or_clear_secret(db, 'podcast_index_api_secret', data['podcastIndexApiSecret'])
+        except SecretWriteRejected:
+            return error_response('provider_crypto_unavailable', 409)
         logger.info("Updated Podcast Index API secret")
 
     return json_response({'message': 'Settings updated'})

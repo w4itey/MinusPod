@@ -125,7 +125,15 @@ class SettingsMixin:
             return None
 
     def set_secret(self, key: str, plaintext: str):
-        """Encrypt and store a secret. Requires provider crypto to be available."""
+        """Encrypt and store a secret. Requires provider crypto to be available.
+
+        No-ops through ``is_ciphertext`` so a request body that replays a
+        previously-emitted ciphertext (e.g. a UI round-trip with a masked
+        field) does not get double-wrapped.
+        """
+        if is_ciphertext(plaintext):
+            self.set_setting(key, plaintext)
+            return
         self.set_setting(key, encrypt(self, plaintext))
 
     def clear_secret(self, key: str):

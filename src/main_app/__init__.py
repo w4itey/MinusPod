@@ -107,6 +107,7 @@ from audio_analysis import AudioAnalyzer
 from sponsor_service import SponsorService
 from status_service import StatusService
 from pattern_service import PatternService
+from secrets_crypto import migrate_plaintext_secrets
 
 # Initialize components
 storage = Storage()
@@ -155,6 +156,29 @@ try:
         audio_logger.info(f"Extracted sponsors for {sponsors_extracted} patterns")
 except Exception as e:
     audio_logger.warning(f"Sponsor extraction failed: {e}")
+
+# Re-encrypt any legacy plaintext provider secrets under the current
+# master passphrase. Idempotent on ``enc:v1:`` rows and no-op when there
+# is no plaintext to migrate, so racing gunicorn workers cannot corrupt
+# the DB; backup filenames include PID and a UUID suffix to avoid
+# collisions when two workers do encrypt at the same wall-clock second.
+try:
+    migrate_plaintext_secrets(db)
+except Exception as e:
+    audio_logger.warning(f"Secret migration failed: {e}")
+
+# The legacy OPENAI_API_KEY -> ANTHROPIC_API_KEY fallback was removed.
+# Warn operators whose env still fits the old shape so the behavior
+# change is discoverable. The check is env-only so the warning fires
+# once per worker boot regardless of migration sentinel state.
+if not os.environ.get('OPENAI_API_KEY') and os.environ.get('ANTHROPIC_API_KEY'):
+    audio_logger.warning(
+        "OPENAI_API_KEY is not set but ANTHROPIC_API_KEY is. The "
+        "cross-provider fallback has been removed; OpenAI-compatible "
+        "requests will no longer use ANTHROPIC_API_KEY. Set "
+        "OPENAI_API_KEY explicitly or configure an OpenAI provider "
+        "via Settings."
+    )
 
 
 def get_or_create_secret_key():

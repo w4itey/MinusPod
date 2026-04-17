@@ -17,6 +17,14 @@ This release is a coordinated security hardening pass. It includes breaking chan
   - `src/utils/safe_http.py` - trust-tier enum (`OPERATOR_CONFIGURED`, `FEED_CONTENT`), redirect-context enum with per-context caps, `ResponseTooLargeError`, `FetchResult`, and `read_response_capped`.
   - `src/utils/subprocess_registry.py` - process registry with `tracked_popen` context manager and `terminate_all` for SIGTERM -> SIGKILL escalation on worker shutdown.
 - `gunicorn.conf.py` mirrors the previous inline flags from `entrypoint.sh` so lifecycle hooks (`on_starting`, `post_fork`, `when_ready`) can be wired from a tracked config file.
+- Startup encryption migration for legacy provider API keys. `secrets_crypto.migrate_plaintext_secrets` walks the known secret-key set (`anthropic_api_key`, `openai_api_key`, `openrouter_api_key`, `ollama_api_key`, `whisper_api_key`, `podcast_index_api_key`, `podcast_index_api_secret`) and re-encrypts any row that still holds plaintext. Idempotent: rows already stored under the `enc:v1:` envelope are skipped. A mandatory pre-migration SQLite backup is written to `/app/data/backups/pre-secret-migration-<timestamp>.db` before any writes; if the backup fails, the migration aborts so plaintext stays recoverable on disk.
+- `secrets_crypto.count_plaintext_secrets` reports how many legacy plaintext rows remain for `/system/status` telemetry.
+
+### Changed
+- `PUT /api/v1/settings/ad-detection` now encrypts at rest when setting `openrouterApiKey`, `whisperApiKey`, `podcastIndexApiKey`, or `podcastIndexApiSecret`. Previously those fields wrote plaintext to the `settings` table, bypassing the per-provider encryption path introduced in 1.2.0. Requests that touch these fields while `MINUSPOD_MASTER_PASSPHRASE` is unset now return `409 provider_crypto_unavailable`, matching `/settings/providers/*`.
+
+### Removed
+- **Breaking:** dropped the legacy `OPENAI_API_KEY` -> `ANTHROPIC_API_KEY` fallback in `get_effective_openai_api_key`. Deployments that previously relied on `ANTHROPIC_API_KEY` satisfying OpenAI-compatible provider requests must set `OPENAI_API_KEY` explicitly (or rely on the per-provider configuration in Settings). A startup `WARN` fires when the old env-var shape is detected so the behavior change is discoverable.
 
 ## [1.6.2] - 2026-04-15
 

@@ -236,11 +236,16 @@ def get_effective_anthropic_api_key() -> Optional[str]:
 
 
 def get_effective_openai_api_key() -> Optional[str]:
-    """Return the OpenAI-compatible API key, DB first then env vars."""
+    """Return the OpenAI-compatible API key, DB first then env var.
+
+    The legacy ``OPENAI_API_KEY`` -> ``ANTHROPIC_API_KEY`` fallback was
+    removed: ``OPENAI_API_KEY`` must be set explicitly for OpenAI-compatible
+    provider calls. Local Ollama still accepts ``not-needed``.
+    """
     db_val = _get_cached_secret('openai_api_key')
     if db_val:
         return db_val
-    return os.environ.get('OPENAI_API_KEY', os.environ.get('ANTHROPIC_API_KEY', 'not-needed'))
+    return os.environ.get('OPENAI_API_KEY', 'not-needed')
 
 
 def get_effective_ollama_api_key() -> Optional[str]:
