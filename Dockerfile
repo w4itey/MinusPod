@@ -22,6 +22,8 @@ FROM nvidia/cuda:12.6.3-runtime-ubuntu24.04
 
 # Install Python 3.11 from deadsnakes PPA and system dependencies
 # Ubuntu 24.04 ships Python 3.12; we use deadsnakes to keep Python 3.11
+# gosu is used by entrypoint.sh to drop privileges after the root-only
+# chown step that migrates the data volume on first boot.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     software-properties-common \
     && add-apt-repository ppa:deadsnakes/ppa \
@@ -31,13 +33,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.11-venv \
     ffmpeg \
     curl \
+    gosu \
     libsndfile1 \
     libchromaprint-tools \
     && apt-get upgrade -y \
     && rm -rf /usr/lib/python3/dist-packages/cryptography* \
               /usr/lib/python3/dist-packages/PyJWT* \
               /usr/lib/python3/dist-packages/jwt* \
-    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* \
+    && gosu nobody true
 
 # Set python3.11 as default, create venv for all pip installs
 # Venv avoids pip 26+ "uninstall-no-record-file" errors with system packages
@@ -102,12 +106,20 @@ COPY entrypoint.sh /app/
 
 # Set permissions - use find to recursively set permissions on subdirectories
 # IMPORTANT: glob pattern *.py does NOT match files in subdirectories!
+# Create a non-root minuspod user (UID/GID 1000) that entrypoint.sh drops
+# privileges to via gosu. The container still starts as root so the
+# entrypoint can chown the data volume on first boot; no app code runs
+# as root. UID/GID are overridable at runtime with APP_UID/APP_GID.
 RUN find ./src -type f -name '*.py' -exec chmod 644 {} \; && \
     find ./src -type d -exec chmod 755 {} \; && \
     find ./static/ui -type f -exec chmod 644 {} \; && \
     find ./static/ui -type d -exec chmod 755 {} \; && \
     chmod 755 /app/entrypoint.sh && \
-    mkdir -p /app/data
+    mkdir -p /app/data && \
+    groupadd --system --gid 1000 minuspod && \
+    useradd --system --uid 1000 --gid minuspod --home-dir /app/data \
+            --shell /sbin/nologin minuspod && \
+    chown -R minuspod:minuspod /app
 
 # Expose port
 EXPOSE 8000
