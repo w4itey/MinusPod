@@ -132,24 +132,34 @@ def register_routes(app):
     @app.route('/ui/')
     @app.route('/ui/<path:path>')
     def serve_ui(path=''):
-        """Serve React UI static files."""
+        """Serve React UI static files.
+
+        Cache headers are tuned per file class: Vite-fingerprinted
+        ``assets/*`` are treated as immutable (1 year); ``index.html``
+        must revalidate on every load so the next deploy is picked up;
+        everything else gets a modest 1 hour cap.
+        """
         if not STATIC_DIR.exists():
             return "UI not built. Run 'npm run build' in frontend directory.", 404
 
         # safe_join returns None on traversal attempts (e.g. '../secret').
         safe_path = safe_join(str(STATIC_DIR), path) if path else None
 
-        # For assets directory, return 404 if file doesn't exist (don't serve
-        # index.html) - prevents MIME type errors when JS/CSS are not found.
         if path and path.startswith('assets/'):
             if not safe_path or not os.path.isfile(safe_path):
                 return "Asset not found", 404
+            response = send_from_directory(STATIC_DIR, path)
+            response.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+            return response
 
-        # Serve index.html for SPA routes (non-asset paths)
         if not path or not safe_path or not os.path.isfile(safe_path):
-            return send_from_directory(STATIC_DIR, 'index.html')
+            response = send_from_directory(STATIC_DIR, 'index.html')
+            response.headers['Cache-Control'] = 'no-cache, must-revalidate'
+            return response
 
-        return send_from_directory(STATIC_DIR, path)
+        response = send_from_directory(STATIC_DIR, path)
+        response.headers['Cache-Control'] = 'public, max-age=3600'
+        return response
 
     # ========== API Documentation ==========
 
