@@ -10,7 +10,7 @@ MinusPod is a self-hosted server that removes ads before you ever hit play. It t
 - [Advanced Features (Quick Reference)](#advanced-features-quick-reference)
 - [Requirements](#requirements)
 - [Quick Start](#quick-start)
-- [Upgrading to 2.0](#upgrading-to-20)
+- [Upgrading to 2.0.0+](#upgrading-to-200)
 - [Web Interface](#web-interface)
   - [Ad Editor Workflow](#ad-editor-workflow)
   - [Screenshots](#screenshots)
@@ -211,9 +211,9 @@ Access the web UI at `http://localhost:8000/ui/` to add and manage feeds.
 
 `MINUSPOD_MASTER_PASSPHRASE` is strongly recommended for production. Without it, provider API keys go into the database as plaintext. Setting it later migrates existing plaintext rows to `enc:v1:` encrypted storage on the next boot, with a mandatory pre-migration SQLite snapshot in `data/backups/`. Restoring a backup requires the same passphrase that created it, so pick a long random value and keep it somewhere separate from the database.
 
-## Upgrading to 2.0
+## Upgrading to 2.0.0+
 
-2.0.0 is a security hardening release. Full detail in `CHANGELOG.md`; the bits that actually affect a deploy:
+The 2.0.0 release is a security hardening milestone. Full detail in `CHANGELOG.md`; the bits that actually affect a deploy:
 
 - `SESSION_COOKIE_SECURE` defaults to `true`. Plain-HTTP setups must set `SESSION_COOKIE_SECURE=false`.
 - `SESSION_COOKIE_SAMESITE` defaults to `Strict`. Override to `Lax` only if an integration breaks.
@@ -386,7 +386,7 @@ This is a comma-separated list of domains excluded from Audiobookshelf's SSRF fi
 
 ## Environment Variables
 
-Grouped by how often you'll touch them. **Standard** is what a typical deployment sets; **Security** is the 2.0.0 hardening surface; **Advanced** are tuning knobs for edge cases; **Optional** are opt-in features.
+Grouped by how often you'll touch them. **Standard** is what a typical deployment sets; **Security** is the 2.0.0+ hardening surface; **Advanced** are tuning knobs for edge cases; **Optional** are opt-in features.
 
 ### Standard
 
@@ -396,6 +396,8 @@ Grouped by how often you'll touch them. **Standard** is what a typical deploymen
 | `LLM_PROVIDER` | `anthropic` | LLM backend: `anthropic`, `openrouter`, `openai-compatible`, or `ollama` |
 | `OPENROUTER_API_KEY` | _(none)_ | OpenRouter API key (required when `LLM_PROVIDER=openrouter`) |
 | `OPENAI_BASE_URL` | `http://localhost:8000/v1` | Base URL for OpenAI-compatible API (only used with non-anthropic providers) |
+| `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` | OpenRouter API base URL. Override for private proxies or regional endpoints. |
+| `ANTHROPIC_BASE_URL` | _(anthropic default)_ | Anthropic API base URL. Override for private proxies. |
 | `OPENAI_API_KEY` | `not-needed` | API key for OpenAI-compatible endpoint (not required for Ollama or local wrappers) |
 | `OPENAI_MODEL` | _(none)_ | Model for OpenAI-compatible/Ollama providers. **Required for Ollama** (e.g. `qwen3:14b`). Defaults to `claude-sonnet-4-5-20250929` for openai-compatible if unset. |
 | `BASE_URL` | `http://localhost:8000` | Public URL for generated feed links |
@@ -412,7 +414,8 @@ Grouped by how often you'll touch them. **Standard** is what a typical deploymen
 | `PODCAST_INDEX_API_KEY` | _(none)_ | PodcastIndex.org API key for podcast search |
 | `PODCAST_INDEX_API_SECRET` | _(none)_ | PodcastIndex.org API secret |
 | `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, or `ERROR` |
-| `DATA_DIR` | `/app/data` | Data storage directory |
+| `LOG_FORMAT` | `text` | `text` or `json`. JSON output plays nicely with log aggregators (Loki, CloudWatch). |
+| `DATA_DIR` | `/app/data` | Data storage directory. Aliases `DATA_PATH` and `MINUSPOD_DATA_DIR` are also honored. |
 
 ### Security
 
@@ -439,6 +442,8 @@ Grouped by how often you'll touch them. **Standard** is what a typical deploymen
 | `GUNICORN_WORKERS` | `2` | Worker count. Lower means single-threaded UI blocking during RSS refresh; higher multiplies per-worker rate-limit counters (when using `memory://`). |
 | `GUNICORN_TIMEOUT` | `600` | Per-request hard timeout. |
 | `GUNICORN_GRACEFUL_TIMEOUT` | `330` | Seconds between SIGTERM and SIGKILL on shutdown. |
+| `SECRET_KEY` | _(auto-generated)_ | Flask session signing key. If unset, a random value is generated on first boot and persisted at `$DATA_DIR/.secret_key`. Set explicitly only for multi-instance deployments sharing a session store. Rotating invalidates all existing sessions. |
+| `SESSION_LIFETIME_HOURS` | `24` | How long authenticated sessions stay valid, in hours. |
 
 ### Optional
 
@@ -799,10 +804,11 @@ Pricing data comes from third-party sources and may lag behind provider announce
 
 ## API
 
-REST API available at `/api/v1/`. Interactive docs at `/docs`. Full specification: [`openapi.yaml`](openapi.yaml).
+REST API available at `/api/v1/`. Interactive docs at `/api/v1/docs`. Full specification: [`openapi.yaml`](openapi.yaml).
 
 Key endpoints:
-- `GET /api/v1/health` - Health check (database, storage, queue status)
+- `GET /api/v1/health` - Readiness check (database, storage); returns 503 if either is down
+- `GET /api/v1/health/live` - Liveness probe (process up); always 200, safe for frequent polling
 - `GET /api/v1/feeds` - List all feeds
 - `POST /api/v1/feeds` - Add a new feed (supports `maxEpisodes` for RSS cap)
 - `POST /api/v1/feeds/import-opml` - Import feeds from OPML file
@@ -1024,14 +1030,14 @@ The docker-compose includes an optional Cloudflare tunnel service for secure rem
 The tunnel exposes the admin interface to the public internet. Without all of these set, anyone who reaches the tunnel URL can hit unauthenticated paths and attempt to log in:
 
 1. Set a password via Settings > Security (or seed with `APP_PASSWORD`).
-2. `SESSION_COOKIE_SECURE=true` (default in 2.0).
+2. `SESSION_COOKIE_SECURE=true` (default in 2.0.0+).
 3. `MINUSPOD_MASTER_PASSPHRASE` set so provider API keys are encrypted at rest.
-4. Cloudflare WAF rule blocking `/ui`, `/api`, `/docs`, `/openapi.yaml` (see below).
+4. Cloudflare WAF rule blocking `/ui` and `/api` (see below). The docs and OpenAPI spec live under `/api/v1/docs` and `/api/v1/openapi.yaml`, so they're already covered by the `/api` block.
 5. `MINUSPOD_TRUSTED_PROXY_COUNT=1` so login lockout keys on the real client IP, not the tunnel loopback.
 
 ### Client IP for login lockout
 
-The 2.0 login lockout feature (5 fails / 15 min / 15 min block) keys on `request.remote_addr`. Depending on how traffic reaches the container, that address may or may not be the real client:
+The 2.0.0+ login lockout feature (5 fails / 15 min / 15 min block) keys on `request.remote_addr`. Depending on how traffic reaches the container, that address may or may not be the real client:
 
 - Direct exposure (no proxy, ports published): `remote_addr` is the client. No config needed.
 - Docker with published ports and no reverse proxy: `remote_addr` is the Docker bridge gateway; lockout will not fire. A startup WARN surfaces this. Deploy behind a proxy or switch to `network_mode: host`.
@@ -1040,16 +1046,16 @@ The 2.0 login lockout feature (5 fails / 15 min / 15 min block) keys on `request
 
 ### Security Recommendations
 
-The 2.0.0 baseline covers most of the attack surface. What's still on the operator:
+Settings the operator controls at deploy time:
 
 - Serve over HTTPS with `SESSION_COOKIE_SECURE=true` (the default).
 - Set `MINUSPOD_TRUSTED_PROXY_COUNT=1` (or higher) behind a reverse proxy so lockout and rate limits see the real client IP.
 - Set `MINUSPOD_MASTER_PASSPHRASE` so provider API keys are encrypted at rest.
 - Set `MINUSPOD_ENABLE_HSTS=true` once the deployment is HTTPS-only.
 - Leave `SESSION_COOKIE_SAMESITE=Strict`; flip to `Lax` only if an integration needs it.
-- Block `/ui`, `/api`, `/docs`, and `/openapi.yaml` at the WAF. Public feed paths stay reachable: `/<slug>`, `/<slug>/<episode>.mp3`, `/<slug>/<episode>.vtt`, `/<slug>/<episode>/chapters.json`, and `/api/v1/feeds/<slug>/artwork`.
+- Block `/ui` and `/api` at the WAF (this covers `/api/v1/docs` and `/api/v1/openapi.yaml` too). Public feed paths stay reachable: `/<slug>`, `/episodes/<slug>/<episode>.mp3`, `/episodes/<slug>/<episode>.vtt`, `/episodes/<slug>/<episode>/chapters.json`, and `/api/v1/feeds/<slug>/artwork`.
 
-Shipped by default in 2.0.0, no operator action needed:
+Shipped by default in 2.0.0+, no operator action needed:
 
 - Double-submit CSRF on every mutating `/api/v1/*` request.
 - Per-IP login lockout: 5 fails in 15 min -> 15 min block, public IPs only.
@@ -1069,14 +1075,14 @@ Create a custom rule to allow only Pocket Casts and block admin paths:
 Rule name: feed_only_allow_pocketcasts
 
 Expression:
-(http.request.full_uri wildcard r"http*://feed.example.com/*" and not http.user_agent wildcard "*Pocket*Casts*") or (http.request.uri.path in {"/ui" "/docs" "/api" "/openapi.yaml"})
+(http.request.full_uri wildcard r"http*://feed.example.com/*" and not http.user_agent wildcard "*Pocket*Casts*") or starts_with(http.request.uri.path, "/ui") or starts_with(http.request.uri.path, "/api")
 
 Action: Block
 ```
 
 This blocks:
 - Any request to your feed domain without "Pocket Casts" in the User-Agent
-- All requests to `/ui`, `/docs`, `/api`, and `/openapi.yaml`
+- All requests under `/ui` and `/api` (this covers the admin UI, all REST endpoints, the interactive docs at `/api/v1/docs`, and the OpenAPI spec at `/api/v1/openapi.yaml`)
 
 Adjust the User-Agent pattern for your podcast app (e.g., `*Overcast*`, `*Castro*`, `*AntennaPod*`).
 
@@ -1105,14 +1111,14 @@ If your host data volume belongs to a different UID, set `APP_UID` and `APP_GID`
 
 ### Database backup sensitivity
 
-The SQLite backup file produced by `GET /api/v1/system/backup` and by the periodic cleanup task contains:
+The SQLite backup files produced by `GET /api/v1/system/backup` and by the periodic cleanup task contain:
 
 - Provider API keys (encrypted with `MINUSPOD_MASTER_PASSPHRASE` when set; plaintext legacy rows otherwise)
 - Flask session signing key
 - Webhook HMAC secrets
 - Password hash (scrypt)
 
-Treat the file like a credential. Restoring an encrypted backup requires the same `MINUSPOD_MASTER_PASSPHRASE` the source used. Without a passphrase, unencrypted backups are still written and a WARN is logged at creation time.
+Treat the file like a credential. When `MINUSPOD_MASTER_PASSPHRASE` is set, both backup paths produce AES-GCM encrypted `.db.enc` files, and restoring requires the same passphrase the source used. Without a passphrase, unencrypted `.db` files are written and a WARN is logged at creation time.
 
 ### Pattern import / export
 
