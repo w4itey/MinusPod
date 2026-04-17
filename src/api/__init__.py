@@ -28,7 +28,9 @@ def _init_server_start_time():
     Always writes the current time on module load (server start).
     This ensures uptime resets on deploy/container restart even when
     the status file persists. Multiple workers may race to write,
-    but the difference is negligible (milliseconds).
+    but the difference is negligible (milliseconds). An exception
+    writing to the shared file is non-fatal (uptime just stays
+    worker-local) but is logged so operators see the regression.
     """
     start_time = time.time()
     try:
@@ -36,7 +38,7 @@ def _init_server_start_time():
         svc = StatusService()
         svc.set_server_start_time(start_time)
     except Exception:
-        pass
+        logger.warning("Failed to record server start time in shared status file", exc_info=True)
     return start_time
 
 _start_time = _init_server_start_time()

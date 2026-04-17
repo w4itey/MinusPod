@@ -4,6 +4,7 @@ import subprocess
 import tempfile
 import os
 import shutil
+from functools import lru_cache
 from pathlib import Path
 from typing import List, Dict, Optional
 
@@ -11,6 +12,22 @@ from utils.audio import get_audio_duration
 from config import FFMPEG_LONG_TIMEOUT
 
 logger = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=1)
+def _check_ffmpeg_once() -> bool:
+    """Verify ffmpeg is on PATH. Cached so at most one subprocess fork runs
+    per worker lifetime regardless of how many AudioProcessor instances the
+    caller spins up."""
+    try:
+        subprocess.run(
+            ['ffmpeg', '-version'],
+            capture_output=True, check=True, timeout=5,
+        )
+        return True
+    except (subprocess.SubprocessError, FileNotFoundError):
+        logger.error("FFMPEG not found or not working")
+        return False
 
 # Get the assets directory - check primary location first, fall back to builtin
 ASSETS_DIR = Path(__file__).parent.parent / "assets"
@@ -41,14 +58,9 @@ class AudioProcessor:
         self._beep_duration = None  # Cached beep duration
 
     def check_ffmpeg(self) -> bool:
-        """Check if FFMPEG is available."""
-        try:
-            subprocess.run(['ffmpeg', '-version'],
-                         capture_output=True, check=True, timeout=5)
-            return True
-        except (subprocess.SubprocessError, FileNotFoundError):
-            logger.error("FFMPEG not found or not working")
-            return False
+        """Check if FFMPEG is available. Result is cached per process so the
+        subprocess fork only runs once per worker lifetime."""
+        return _check_ffmpeg_once()
 
     def get_audio_duration(self, audio_path: str) -> Optional[float]:
         """Get duration of audio file in seconds.

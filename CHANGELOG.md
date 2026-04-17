@@ -45,6 +45,9 @@ This release is a coordinated security hardening pass. It includes breaking chan
 - `/api/v1/health` no longer instantiates `ProcessingQueue`. The queue check opened a file lock and regressed latency for frequent Docker health polls without giving any additional ill-health signal. The endpoint still reports `{database, storage}` status with the same 200/503 semantics so existing Docker and Portainer health checks keep working.
 - Added `GET /api/v1/health/live` for Kubernetes-style liveness probes. Returns `{"status": "ok"}` unconditionally and has no side effects; safe for per-second polling.
 - `POST /api/v1/feeds` no longer logs the full request body at DEBUG. Missing-field warnings log only the fact of the miss, not the received payload.
+- Password minimum length raised from 8 to 12 characters. Existing password hashes verify regardless of length (grandfathered); the new minimum only applies when setting or changing. `generate_password_hash` now explicitly pins `method='scrypt'` so the hash algorithm is visible in code rather than relying on whichever default werkzeug ships.
+- `_check_ffmpeg_once` replaces the per-`AudioProcessor` `ffmpeg -version` fork with an `lru_cache`-backed module-level check. One subprocess per worker lifetime regardless of how many `AudioProcessor` instances the processing pipeline spins up.
+- `_init_server_start_time` now logs a WARN with `exc_info` when the shared status-file write fails. Previously it swallowed exceptions silently; uptime would stay worker-local and operators would not know.
 
 ## [1.6.2] - 2026-04-15
 

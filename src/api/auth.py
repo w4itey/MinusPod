@@ -137,12 +137,15 @@ def auth_set_password():
             'passwordSet': False
         })
 
-    # Validate new password
-    if len(new_password) < 8:
-        return error_response('Password must be at least 8 characters', 400)
+    # Validate new password (grandfathered: pre-existing hashes with shorter
+    # passwords still verify cleanly; the new minimum only applies to the
+    # set/change path).
+    if len(new_password) < 12:
+        return error_response('Password must be at least 12 characters', 400)
 
-    # Hash and store new password
-    password_hash = generate_password_hash(new_password)
+    # Pin the hash method so security decisions are visible in code rather
+    # than depending on whichever default werkzeug ships today.
+    password_hash = generate_password_hash(new_password, method='scrypt')
     db.set_setting('app_password', password_hash)
     logger.info(f"Password {'changed' if password_set else 'set'} by {request.remote_addr}")
 
