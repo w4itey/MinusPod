@@ -59,17 +59,20 @@ def apply_csrf_cookie(response: Response, cookie_secure: bool) -> Response:
 def validate(request: Request) -> Optional[str]:
     """Return None if the CSRF check passes, else a user-safe error string.
 
-    Callers translate the error string into a 403. The check is skipped
-    for safe methods and when no session token has been issued yet
-    (pre-login bootstrap requests).
+    Callers translate the error string into a 403. Safe methods bypass.
+    For mutating methods the check fails closed: the header must match the
+    session-held token, and a session without a token on a mutating
+    authenticated request is itself a failure (e.g. a stale pre-upgrade
+    cookie). Unauthenticated sessions bypass because the auth layer runs
+    first and will 401 them regardless.
     """
     if request.method in SAFE_METHODS:
         return None
+    if not session.get('authenticated', False):
+        return None
     expected = session.get(CSRF_SESSION_KEY)
     if not expected:
-        # No session token to double-submit against; let auth layer decide
-        # whether the request is allowed.
-        return None
+        return 'CSRF token missing or invalid'
     supplied = request.headers.get(CSRF_HEADER_NAME)
     if not supplied or not secrets.compare_digest(supplied, expected):
         return 'CSRF token missing or invalid'

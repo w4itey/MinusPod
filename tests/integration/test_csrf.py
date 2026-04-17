@@ -111,3 +111,28 @@ def test_login_endpoint_exempt_from_csrf(csrf_client):
 def test_safe_methods_do_not_require_csrf(csrf_client):
     response = csrf_client.get('/api/v1/auth/status')
     assert response.status_code == 200
+
+
+def test_authenticated_session_without_csrf_token_is_rejected(csrf_client):
+    """Simulate a stale pre-2.0 session cookie that has authenticated=True
+    but no _csrf_token key. The CSRF layer must still 403, not pass through.
+
+    Requires a configured app_password so the auth layer takes effect;
+    without one, the server treats every request as authenticated and
+    the CSRF check is moot by design.
+    """
+    from werkzeug.security import generate_password_hash
+    db = database.Database()
+    db.set_setting('app_password', generate_password_hash('CsrfStale123456', method='scrypt'))
+
+    with csrf_client.session_transaction() as sess:
+        sess['authenticated'] = True
+        sess.pop('_csrf_token', None)
+
+    response = csrf_client.post(
+        '/api/v1/feeds',
+        data=json.dumps({'sourceUrl': 'https://example.com/feed.xml'}),
+        content_type='application/json',
+    )
+    assert response.status_code == 403
+    assert 'CSRF' in (response.get_data(as_text=True) or '')
