@@ -13,7 +13,7 @@ from typing import Optional
 from jinja2 import TemplateError
 from jinja2.sandbox import SandboxedEnvironment
 
-from utils.http import post_with_retry
+from utils.safe_http import URLTrust, safe_post
 from utils.time import utc_now_iso
 from utils.url import validate_url, SSRFError
 
@@ -173,18 +173,39 @@ def _prepare_and_dispatch(webhook_config, context, add_test_flag=False,
         ).hexdigest()
         headers['X-MinusPod-Signature'] = f"sha256={sig}"
 
-    resp = post_with_retry(
-        url,
-        max_retries=max_attempts,
-        timeout=_REQUEST_TIMEOUT_SECS,
-        log_prefix=f"Webhook({url})",
-        data=body_bytes,
-        headers=headers,
-    )
-    if resp is not None:
-        logger.info("Webhook delivered to %s (status %d)", url, resp.status_code)
-        return resp.status_code
-    return None
+    # Webhook URLs are operator-configured (admin-typed), so use
+    # OPERATOR_CONFIGURED trust. safe_post revalidates every redirect hop
+    # against the SSRF rules, which closes a gap where a legitimate webhook
+    # host could 302 to a private IP. Retry loop wraps safe_post because
+    # the consolidated fetcher is a single shot per call.
+    last_status = None
+    for attempt in range(max_attempts):
+        try:
+            resp = safe_post(
+                url,
+                trust=URLTrust.OPERATOR_CONFIGURED,
+                timeout=_REQUEST_TIMEOUT_SECS,
+                max_redirects=3,
+                data=body_bytes,
+                headers=headers,
+            )
+        except SSRFError as exc:
+            logger.warning("Webhook URL blocked mid-redirect: %s (%s)", url, exc)
+            return None
+        except Exception as exc:
+            logger.warning(
+                "Webhook attempt %d/%d failed for %s: %s",
+                attempt + 1, max_attempts, url, exc,
+            )
+            continue
+
+        last_status = resp.status_code
+        if resp.status_code < 500:
+            break
+
+    if last_status is not None:
+        logger.info("Webhook delivered to %s (status %d)", url, last_status)
+    return last_status
 
 
 def load_webhooks(db=None):
