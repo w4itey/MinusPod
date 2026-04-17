@@ -16,7 +16,7 @@ from werkzeug.utils import safe_join
 from config import APP_USER_AGENT, JIT_RETRY_COOLDOWN_SECONDS, MAX_EPISODE_RETRIES
 from utils.safe_http import URLTrust, safe_head
 from utils.time import parse_iso_datetime
-from utils.url import validate_url, SSRFError
+from utils.url import SSRFError
 
 feed_logger = logging.getLogger('podcast.feed')
 refresh_logger = logging.getLogger('podcast.refresh')

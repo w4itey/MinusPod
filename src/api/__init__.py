@@ -14,7 +14,6 @@ from functools import wraps
 from config import normalize_model_key
 from utils.time import parse_timestamp
 from utils.text import extract_text_in_range
-from utils.url import validate_url, SSRFError
 from sponsor_service import SponsorService
 from cancel import cancel_processing
 

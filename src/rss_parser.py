@@ -13,7 +13,7 @@ from urllib.parse import urlparse
 from config import APP_USER_AGENT
 from utils.circuit_breaker import CircuitBreaker, CircuitBreakerOpen
 from utils.time import parse_iso_datetime
-from utils.url import validate_url, SSRFError
+from utils.url import SSRFError
 from utils.safe_http import URLTrust, safe_get
 
 

@@ -12,9 +12,9 @@ from pathlib import Path
 from utils.audio import get_audio_duration
 from utils.time import format_vtt_timestamp
 from utils.gpu import clear_gpu_memory, get_available_memory_gb, get_gpu_memory_info
-from utils.http import post_with_retry, safe_url_for_log
-from utils.url import validate_url, SSRFError
-from utils.safe_http import URLTrust, safe_get
+from utils.http import safe_url_for_log
+from utils.url import SSRFError
+from utils.safe_http import URLTrust, safe_get, safe_post
 from config import (
     API_CHUNK_DURATION_SECONDS,
     WHISPER_BACKEND_LOCAL,
@@ -627,17 +627,43 @@ class Transcriber:
 
             logger.info("Sending audio to whisper API (size=%.1fMB)", upload_size / 1024 / 1024)
 
-            with open(transcribe_path, 'rb') as audio_file:
-                response = post_with_retry(
-                    url,
-                    headers=headers,
-                    files={'file': (os.path.basename(transcribe_path), audio_file)},
-                    data=form_data,
-                    log_prefix="Whisper API",
-                    max_retries=2,
+            # Whisper API URLs are operator-typed, so OPERATOR_CONFIGURED
+            # trust (private / loopback allowed for self-hosted whisper.cpp
+            # servers; cloud metadata and downgrades refused per-hop).
+            # safe_post does not retry; wrap in a small backoff loop so
+            # transient upstream blips do not fail a full transcription.
+            response = None
+            max_attempts = 2
+            for attempt in range(max_attempts):
+                try:
+                    with open(transcribe_path, 'rb') as audio_file:
+                        response = safe_post(
+                            url,
+                            trust=URLTrust.OPERATOR_CONFIGURED,
+                            timeout=600,
+                            max_redirects=3,
+                            files={'file': (os.path.basename(transcribe_path), audio_file)},
+                            data=form_data,
+                            headers=headers,
+                        )
+                except SSRFError as exc:
+                    logger.warning(f"Whisper API URL blocked: {exc}")
+                    return None
+                except requests.RequestException as exc:
+                    logger.warning(
+                        "Whisper API attempt %d/%d failed: %s",
+                        attempt + 1, max_attempts, exc,
+                    )
+                    response = None
+                    continue
+                if response.status_code < 500:
+                    break
+                logger.warning(
+                    "Whisper API attempt %d/%d returned %d",
+                    attempt + 1, max_attempts, response.status_code,
                 )
 
-            if response is None:
+            if response is None or response.status_code >= 400:
                 return None
 
             # Parse verbose_json response

@@ -9,7 +9,7 @@ import tempfile
 import shutil
 
 from config import BROWSER_USER_AGENT
-from utils.url import validate_url, SSRFError
+from utils.url import SSRFError
 from utils.validation import is_dangerous_slug, is_valid_episode_id
 from utils.safe_http import (
     ResponseTooLargeError,
