@@ -399,6 +399,15 @@ This is a comma-separated list of domains excluded from Audiobookshelf's SSRF fi
 | `PODCAST_INDEX_API_KEY` | _(none)_ | PodcastIndex.org API key for podcast search (or configure in Settings) |
 | `PODCAST_INDEX_API_SECRET` | _(none)_ | PodcastIndex.org API secret |
 | `TUNNEL_TOKEN` | _(none)_ | Cloudflare tunnel token for remote access |
+| `SESSION_COOKIE_SECURE` | `true` | Whether the session cookie carries the `Secure` flag. Leave on for HTTPS deployments (default). Set to `false` only when serving over plain HTTP (e.g. LAN-only). |
+| `SESSION_COOKIE_SAMESITE` | `Strict` | `SameSite` attribute for the session cookie. `Strict` blocks every cross-site navigation from attaching the cookie; change to `Lax` only if an integration needs it. |
+| `MINUSPOD_ENABLE_HSTS` | `false` | When `true`, responses carry `Strict-Transport-Security: max-age=31536000; includeSubDomains`. Keep off on plain-HTTP deployments (HSTS traps browsers into HTTPS-only). |
+| `MINUSPOD_TRUSTED_PROXY_COUNT` | `0` | Number of reverse-proxy hops to trust when reading `X-Forwarded-For`. Login lockout keys on the real client IP; set to `1` behind a single Cloudflare/nginx hop, higher behind a multi-hop chain. Startup logs a WARN if this is unset in a container. |
+| `MINUSPOD_MAX_ARTWORK_BYTES` | `5242880` (5 MB) | Cap on podcast artwork download size. Clamped to `[65536, 52428800]`. |
+| `APP_UID` / `APP_GID` | `1000` / `1000` | Override the UID/GID that gunicorn runs as inside the container. Useful when the data volume is owned by a different UID on the host. |
+| `SENTRY_DSN` | _(none)_ | When set (and `sentry-sdk` is installed), errors flow to Sentry. Headers, cookies, CSRF tokens, and credential-like query params are scrubbed before send; performance tracing is disabled. |
+| `MINUSPOD_RELEASE` | _(none)_ | Optional release tag forwarded to `sentry_sdk.init(release=...)`. |
+| `SENTRY_ENVIRONMENT` | `production` | Environment tag forwarded to Sentry. |
 
 ### Using Claude Code Wrapper (Max Subscription)
 
