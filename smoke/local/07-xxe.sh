@@ -41,8 +41,7 @@ sleep 1
 JAR="$RESULTS_DIR/T07-cookies.jar"
 rm -f "$JAR"
 login "$LOCAL_BASE" "$LOCAL_PASSWORD" "$JAR" >/dev/null
-csrf=$(curl -s -b "$JAR" "$LOCAL_BASE/api/v1/auth/status" \
-    | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("csrf_token","") or d.get("csrfToken",""))' 2>/dev/null || true)
+csrf=$(csrf_from_jar "$LOCAL_BASE" "$JAR")
 
 XXE_URL="http://${GATEWAY}:${HOST_PORT}/feed.xml"
 note "submitting XXE feed: $XXE_URL"

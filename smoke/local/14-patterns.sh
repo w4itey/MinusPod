@@ -13,8 +13,7 @@ TEST_NAME="T14-patterns" source "$SCRIPT_DIR/../lib/common.sh"
 JAR="$RESULTS_DIR/T14-cookies.jar"
 rm -f "$JAR"
 login "$LOCAL_BASE" "$LOCAL_PASSWORD" "$JAR" >/dev/null
-csrf=$(curl -s -b "$JAR" "$LOCAL_BASE/api/v1/auth/status" \
-    | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("csrf_token","") or d.get("csrfToken",""))' 2>/dev/null || true)
+csrf=$(csrf_from_jar "$LOCAL_BASE" "$JAR")
 
 EXPORT="$RESULTS_DIR/T14-patterns-export.json"
 rm -f "$EXPORT"

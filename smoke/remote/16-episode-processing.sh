@@ -50,13 +50,28 @@ fi
 note "episode: $ep_id"
 
 # 3) CSRF then reprocess
-csrf=$(curl -s -b "$REMOTE_COOKIES" "$REMOTE_BASE/api/v1/auth/status" \
-    | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("csrf_token","") or d.get("csrfToken",""))' 2>/dev/null || true)
+# CSRF token lives in the `minuspod_csrf` cookie, not the /auth/status
+# JSON body. Use a temporary jar so the response's Set-Cookie lands in a
+# parsable format.
+TMP_JAR=$(mktemp)
+curl -s -b "$REMOTE_COOKIES" -c "$TMP_JAR" -o /dev/null "$REMOTE_BASE/api/v1/auth/status"
+# Netscape cookie jar columns: domain hostonly path secure expires name value
+csrf=$(awk '/minuspod_csrf/{print $7}' "$TMP_JAR" | head -1)
+rm -f "$TMP_JAR"
+if [ -z "$csrf" ]; then
+    # Fall back to the token in the stable cookies.txt if /auth/status
+    # didn't refresh (server may skip Set-Cookie when the existing
+    # cookie is still valid).
+    csrf=$(awk '/minuspod_csrf/{print $7}' "$REMOTE_COOKIES" | head -1)
+fi
+note "csrf token length: ${#csrf}"
 
 reproc_code=$(curl -s -o "$RESULTS_DIR/T16-reproc.json" -w '%{http_code}' \
     -b "$REMOTE_COOKIES" \
     -X POST "$REMOTE_BASE/api/v1/episodes/$feed_id/$ep_id/reprocess" \
-    -H "X-CSRF-Token: $csrf")
+    -H "Content-Type: application/json" \
+    -H "X-CSRF-Token: $csrf" \
+    -d '{}')
 note "reprocess HTTP $reproc_code"
 assert_in "$reproc_code" "200 202 204" "reprocess accepted"
 

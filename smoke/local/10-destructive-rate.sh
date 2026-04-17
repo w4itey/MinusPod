@@ -8,8 +8,7 @@ TEST_NAME="T10-destructive-rate" source "$SCRIPT_DIR/../lib/common.sh"
 JAR="$RESULTS_DIR/T10-cookies.jar"
 rm -f "$JAR"
 login "$LOCAL_BASE" "$LOCAL_PASSWORD" "$JAR" >/dev/null
-csrf=$(curl -s -b "$JAR" "$LOCAL_BASE/api/v1/auth/status" \
-    | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("csrf_token","") or d.get("csrfToken",""))' 2>/dev/null || true)
+csrf=$(csrf_from_jar "$LOCAL_BASE" "$JAR")
 
 # memory:// rate-limiter storage is per-worker, and the container runs
 # with workers=2. A single extra request could route to the other worker

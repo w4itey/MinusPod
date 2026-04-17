@@ -8,8 +8,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEST_NAME="R-T06-ssrf" source "$SCRIPT_DIR/../lib/common.sh"
 
-csrf=$(curl -s -b "$REMOTE_COOKIES" "$REMOTE_BASE/api/v1/auth/status" \
-    | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("csrf_token","") or d.get("csrfToken",""))' 2>/dev/null || true)
+csrf=$(csrf_from_jar "$REMOTE_BASE" "$REMOTE_COOKIES")
 note "csrf token length: ${#csrf}"
 
 # Only one private-net + one metadata target on remote (read-only spirit)
