@@ -988,9 +988,26 @@ The docker-compose includes an optional Cloudflare tunnel service for secure rem
 
 ### Security Recommendations
 
-When exposing your feed to the internet (required for apps like Pocket Casts), consider adding WAF rules to:
-- Only allow requests from known podcast app User-Agents
-- Block access to admin endpoints (`/ui`, `/docs`, `/api`)
+When exposing your instance to the internet, the 2.0.0 baseline covers most of the attack surface by default. Two things are still the operator's job:
+
+**Do:**
+- Keep `SESSION_COOKIE_SECURE=true` (default) behind HTTPS.
+- Set `MINUSPOD_TRUSTED_PROXY_COUNT=1` (or higher) so login lockout and rate limits key on the real client IP instead of the reverse-proxy hop.
+- Set `MINUSPOD_MASTER_PASSPHRASE` so provider API keys are encrypted at rest.
+- Set `MINUSPOD_ENABLE_HSTS=true` once your deployment is HTTPS-only.
+- Keep the default `SESSION_COOKIE_SAMESITE=Strict`; change to `Lax` only if a specific integration breaks without it.
+- Put `/ui`, `/api`, `/docs`, and `/openapi.yaml` behind a WAF rule that blocks them from the public internet. The public feed endpoints (`/<slug>`, `/<slug>/<episode>.mp3`, `/<slug>/<episode>.vtt`, `/<slug>/<episode>/chapters.json`, `/api/v1/feeds/<slug>/artwork`) must stay reachable for podcast apps.
+
+**Baseline shipped in 2.0.0 (no action required):**
+- Double-submit CSRF on every mutating `/api/v1/*` request.
+- Per-IP login lockout (5 fails in 15 min -> 15 min block, public IPs only).
+- Path-traversal defense on slug / episode-id inputs.
+- SSRF tier-aware fetcher on every outbound call; per-hop redirect revalidation; HTTPS -> HTTP downgrades blocked.
+- Artwork magic-number validation + size cap.
+- Stdlib XML parsers locked down (DTDs, external entities, entity bombs all rejected).
+- `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, and a scoped CSP on every response.
+- Container runs as UID 1000 (not root) after first-boot volume chown.
+- Rate limits on destructive endpoints (`POST /system/cleanup` 1/h, `DELETE /system/queue` 6/h, `GET /history/export` 5/h) with WARN audit logs.
 
 **Cloudflare WAF Example**
 
@@ -1000,14 +1017,14 @@ Create a custom rule to allow only Pocket Casts and block admin paths:
 Rule name: feed_only_allow_pocketcasts
 
 Expression:
-(http.request.full_uri wildcard r"http*://feed.example.com/*" and not http.user_agent wildcard "*Pocket*Casts*") or (http.request.uri.path in {"/ui" "/docs"})
+(http.request.full_uri wildcard r"http*://feed.example.com/*" and not http.user_agent wildcard "*Pocket*Casts*") or (http.request.uri.path in {"/ui" "/docs" "/api" "/openapi.yaml"})
 
 Action: Block
 ```
 
 This blocks:
 - Any request to your feed domain without "Pocket Casts" in the User-Agent
-- All requests to `/ui` and `/docs` endpoints
+- All requests to `/ui`, `/docs`, `/api`, and `/openapi.yaml`
 
 Adjust the User-Agent pattern for your podcast app (e.g., `*Overcast*`, `*Castro*`, `*AntennaPod*`).
 
