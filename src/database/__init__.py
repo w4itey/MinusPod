@@ -269,7 +269,16 @@ class Database(SchemaMixin, PodcastMixin, EpisodeMixin, SettingsMixin,
         self._migrate_from_json()
 
     def get_connection(self) -> sqlite3.Connection:
-        """Get thread-local database connection."""
+        """Get thread-local database connection.
+
+        WAL mode is preferred but not required: a stale or permissioned
+        WAL file on the mounted volume occasionally makes the first
+        ``PRAGMA journal_mode = WAL`` fail with "disk I/O error". When
+        that happens, reset the journal via ``PRAGMA journal_mode = DELETE``
+        and try WAL once more. If WAL is still refused, stay on DELETE
+        mode -- less concurrent, still correct -- rather than crash the
+        worker on boot.
+        """
         if not hasattr(self._local, 'connection') or self._local.connection is None:
             self._local.connection = sqlite3.connect(
                 str(self.db_path),
@@ -277,22 +286,33 @@ class Database(SchemaMixin, PodcastMixin, EpisodeMixin, SettingsMixin,
                 timeout=30.0
             )
             self._local.connection.row_factory = sqlite3.Row
-            # WAL mode for concurrent reader/writer isolation.
-            self._local.connection.execute("PRAGMA journal_mode = WAL")
-            # 30-second busy timeout so a slow write does not fail the reader.
             self._local.connection.execute("PRAGMA busy_timeout = 30000")
             self._local.connection.execute("PRAGMA foreign_keys = ON")
+            try:
+                self._local.connection.execute("PRAGMA journal_mode = WAL")
+            except sqlite3.OperationalError as exc:
+                logger.warning(
+                    "PRAGMA journal_mode = WAL failed (%s); resetting WAL "
+                    "state and retrying.",
+                    exc,
+                )
+                try:
+                    self._local.connection.execute("PRAGMA journal_mode = DELETE")
+                    self._local.connection.execute("PRAGMA journal_mode = WAL")
+                except sqlite3.OperationalError:
+                    logger.warning(
+                        "WAL mode still refused after reset; falling back "
+                        "to DELETE journal. Concurrency is reduced until "
+                        "the volume state is repaired.",
+                    )
             # NORMAL sync gives WAL its durability contract (fsync on
             # checkpoint and WAL commit) without the fsync-every-write
-            # penalty of FULL. Well-matched to this workload; the
-            # episode-processing pipeline already tolerates a lost
-            # last transaction on power failure (the episode simply
-            # reruns), and the cost savings on the hot path are large.
-            self._local.connection.execute("PRAGMA synchronous = NORMAL")
-            # Trigger an automatic checkpoint every 1000 WAL pages
-            # (~4 MB) so the WAL file does not grow unboundedly
-            # between reader connections.
-            self._local.connection.execute("PRAGMA wal_autocheckpoint = 1000")
+            # penalty of FULL. Harmless in DELETE mode too.
+            try:
+                self._local.connection.execute("PRAGMA synchronous = NORMAL")
+                self._local.connection.execute("PRAGMA wal_autocheckpoint = 1000")
+            except sqlite3.OperationalError:
+                pass
         return self._local.connection
 
     class _TransactionContext:
