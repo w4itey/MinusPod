@@ -3,17 +3,28 @@ import json
 import logging
 import queue
 
-from flask import Response
+from flask import Response, session
 
 from api import (
     api, log_request, json_response,
-    get_status_service,
+    get_database, get_status_service,
 )
 
 logger = logging.getLogger('podcast.api')
 
 
 # ========== Status Stream Endpoint (SSE) ==========
+
+def _is_authenticated() -> bool:
+    """Mirror the api.before_request auth rule. When no password is set
+    there is no auth to enforce; otherwise the session flag is required.
+    """
+    db = get_database()
+    password_hash = db.get_setting('app_password')
+    if not password_hash:
+        return True
+    return bool(session.get('authenticated', False))
+
 
 @api.route('/status/stream', methods=['GET'])
 def status_stream():
@@ -22,12 +33,20 @@ def status_stream():
 
     Returns a continuous event stream with status updates whenever
     processing state changes.
+
+    The endpoint is listed in AUTH_EXEMPT_PREFIXES because EventSource
+    cannot surface a 401 status to the client; instead we emit an
+    application-level ``auth-failed`` event when the session lapses and
+    the browser-side handler in GlobalStatusBar.tsx redirects to /login.
     """
     def generate():
+        if not _is_authenticated():
+            yield "event: auth-failed\ndata: {}\n\n"
+            return
+
         status_service = get_status_service()
         update_queue = queue.Queue(maxsize=50)
 
-        # Subscribe to status updates
         def on_update(status):
             try:
                 update_queue.put_nowait(status_service.to_dict())
@@ -37,17 +56,18 @@ def status_stream():
         unsubscribe = status_service.subscribe(on_update)
 
         try:
-            # Send initial status immediately
             yield f"data: {json.dumps(status_service.to_dict())}\n\n"
 
-            # Stream updates as they occur
             while True:
                 try:
-                    # Wait for update with timeout (for keepalive)
                     status = update_queue.get(timeout=15)
                     yield f"data: {json.dumps(status)}\n\n"
                 except queue.Empty:
-                    # Send keepalive comment
+                    # Revalidate session on every keepalive so the client
+                    # is evicted when the operator logs out elsewhere.
+                    if not _is_authenticated():
+                        yield "event: auth-failed\ndata: {}\n\n"
+                        return
                     yield ": keepalive\n\n"
         finally:
             unsubscribe()
