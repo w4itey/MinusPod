@@ -78,7 +78,7 @@ def auth_login():
         if locked_until:
             logger.warning("Login attempt on locked IP %s (until %s)", ip, locked_until)
             response = error_response('Too many failed attempts; try again later', 429)
-            response[0].headers['Retry-After'] = locked_until
+            response.headers['Retry-After'] = locked_until
             return response
 
     if not stored_hash or not check_password_hash(stored_hash, password):
