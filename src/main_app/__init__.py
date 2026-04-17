@@ -291,6 +291,28 @@ def graceful_shutdown(signum, frame):
         logger.info(f"Shutdown signal sent, processing in progress: {current[0]}:{current[1]}")
         logger.info("Gunicorn graceful-timeout will allow processing to finish")
 
+    # Release the background-leader flock explicitly. Linux frees the
+    # advisory lock when the FD closes anyway, so this is defensive;
+    # on NFS and weird filesystem layers with buggy close-on-exit
+    # semantics, the explicit LOCK_UN is the only way to guarantee
+    # release inside the graceful window.
+    lock_file = getattr(_try_become_background_leader, '_lock_file', None)
+    if lock_file is not None:
+        try:
+            fcntl.flock(lock_file, fcntl.LOCK_UN)
+            logger.info("Released background leader lock")
+        except Exception as exc:
+            logger.warning("Failed to release background leader lock: %s", exc)
+
+    # Terminate any tracked subprocess children so a SIGTERM on the
+    # worker does not leave ffmpeg / whisper processes orphaned. The
+    # registry is a no-op if no processes have been registered.
+    try:
+        from utils.subprocess_registry import terminate_all
+        terminate_all(timeout=5.0)
+    except Exception as exc:
+        logger.warning("subprocess_registry terminate_all failed: %s", exc)
+
 
 def _try_become_background_leader() -> bool:
     """Try to acquire exclusive lock for background thread ownership.

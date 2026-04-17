@@ -438,6 +438,10 @@ def register_routes(app):
             abort(404)
 
         feed_logger.info(f"[{slug}:{episode_id}] Serving VTT transcript")
+        # Podcasting 2.0 clients fetch transcripts cross-origin from a
+        # different podcast-player host; Access-Control-Allow-Origin: *
+        # is intentional here and matches the spec-standard behavior.
+        # No credentials are involved; the endpoint carries no session.
         response = Response(vtt_content, mimetype='text/vtt')
         response.headers['Access-Control-Allow-Origin'] = '*'
         return response
@@ -458,6 +462,9 @@ def register_routes(app):
             abort(404)
 
         feed_logger.info(f"[{slug}:{episode_id}] Serving chapters JSON")
+        # Podcasting 2.0 chapters.json is fetched cross-origin by
+        # podcast players; the wildcard Access-Control-Allow-Origin
+        # is intentional. No credentials travel with the request.
         response = Response(json.dumps(chapters), mimetype='application/json+chapters')
         response.headers['Access-Control-Allow-Origin'] = '*'
         return response

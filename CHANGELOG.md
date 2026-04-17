@@ -54,6 +54,8 @@ Coordinated security hardening pass across the auth surface, crypto, SSRF, path 
 - `main_app.shared_state.permanently_failed_warned` is now a thread-safe `_BoundedSet(maxsize=10_000)` instead of an unbounded `set`.
 - Container no longer runs application code as root. The Dockerfile creates a `minuspod` user (UID/GID 1000) and installs `gosu`; the entrypoint starts as root so it can `chown` the data volume on first boot, then drops privileges via `exec gosu minuspod gunicorn`. First-boot chown uses `find ! -user $APP_UID` and logs the migrated count. `APP_UID` / `APP_GID` env vars override; `docker run --user <N>` bypasses chown/drop.
 - `cryptography` minimum bumped from 46.0.5 to 46.0.7.
+- `graceful_shutdown` now explicitly releases the background-leader `fcntl.flock` on signal, and calls `utils.subprocess_registry.terminate_all` to escalate SIGTERM -> SIGKILL on any tracked ffmpeg / whisper child. On Linux the close-on-exit semantics released the lock anyway; the explicit `LOCK_UN` is defensive for NFS and weirder filesystem layers.
+- `Access-Control-Allow-Origin: *` on `/episodes/<slug>/<episode_id>.vtt` and `/episodes/<slug>/<episode_id>/chapters.json` is now annotated in code as intentional (Podcasting 2.0 cross-origin fetch; no credentials) so future CORS-removal passes do not regress the spec-standard behavior.
 
 ### Removed
 - **Breaking:** removed the legacy `OPENAI_API_KEY` -> `ANTHROPIC_API_KEY` fallback in `get_effective_openai_api_key`. Deployments that previously relied on `ANTHROPIC_API_KEY` satisfying OpenAI-compatible provider requests must set `OPENAI_API_KEY` explicitly (or configure per-provider in Settings). A startup `WARN` fires when the old env-var shape is detected.
