@@ -2,7 +2,6 @@
 import json
 import logging
 import os
-import requests
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple
 import tempfile
