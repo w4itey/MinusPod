@@ -13,7 +13,11 @@ from api import (
     get_database, get_storage, _get_version, _start_time,
 )
 from pricing_fetcher import force_refresh_pricing
-from secrets_crypto import count_plaintext_secrets, is_available as crypto_available
+from secrets_crypto import (
+    count_plaintext_secrets,
+    is_available as crypto_available,
+    encrypt_bytes as _encrypt_bytes,
+)
 
 logger = logging.getLogger('podcast.api')
 
@@ -255,7 +259,35 @@ def backup_database():
         logger.info(f"Database backup created: {backup_size} bytes")
 
         timestamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
-        filename = f"minuspod-backup-{timestamp}.db"
+
+        # If MINUSPOD_MASTER_PASSPHRASE is set, encrypt the backup so an
+        # exported copy doesn't leak plaintext provider secrets that
+        # predate the 2.0 crypto migration. Operators can opt out with
+        # ?encrypted=false when they have another protection layer (e.g.
+        # per-download GPG wrap).
+        encrypt_param = request.args.get('encrypted', 'true').lower() != 'false'
+        if encrypt_param and crypto_available():
+            try:
+                with open(tmp_path, 'rb') as f:
+                    blob = f.read()
+                enc_blob = _encrypt_bytes(get_database(), blob)
+                with open(tmp_path, 'wb') as f:
+                    f.write(enc_blob)
+                filename = f"minuspod-backup-{timestamp}.db.enc"
+                logger.info(
+                    "Database backup encrypted: %s -> %s bytes (AES-GCM)",
+                    backup_size, len(enc_blob),
+                )
+            except Exception:
+                logger.exception("Backup encryption failed; aborting download")
+                return error_response('Backup encryption failed', 500)
+        else:
+            filename = f"minuspod-backup-{timestamp}.db"
+            if encrypt_param and not crypto_available():
+                logger.warning(
+                    "Database backup downloaded UNENCRYPTED: "
+                    "set MINUSPOD_MASTER_PASSPHRASE to enable AES-GCM wrap"
+                )
 
         # Clean up temp file after response is sent (stream from disk, not memory)
         cleanup_path = tmp_path

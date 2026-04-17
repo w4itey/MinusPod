@@ -8,6 +8,7 @@ import tempfile
 import shutil
 
 from config import BROWSER_USER_AGENT
+from utils.http import safe_url_for_log
 from utils.url import SSRFError
 from utils.validation import is_dangerous_slug, is_valid_episode_id
 from utils.safe_http import (
@@ -83,9 +84,17 @@ def _safe_join_under(base: Path, *parts: str) -> Path:
 class Storage:
     """Storage manager using SQLite for metadata and filesystem for large files."""
 
-    def __init__(self, data_dir: str = "/app/data"):
+    def __init__(self, data_dir: Optional[str] = None):
+        # Tests and non-container deploys need a configurable root;
+        # /app/data is the in-container default.
+        if data_dir is None:
+            data_dir = (
+                os.environ.get("DATA_PATH")
+                or os.environ.get("MINUSPOD_DATA_DIR")
+                or "/app/data"
+            )
         self.data_dir = Path(data_dir)
-        self.data_dir.mkdir(exist_ok=True)
+        self.data_dir.mkdir(parents=True, exist_ok=True)
 
         # Create podcasts subdirectory
         self.podcasts_dir = self.data_dir / "podcasts"
@@ -440,7 +449,7 @@ class Storage:
                     return True
                 logger.info(f"[{slug}] artwork_cached flag set but file missing, re-downloading")
 
-            logger.info(f"[{slug}] Downloading artwork from {artwork_url}")
+            logger.info(f"[{slug}] Downloading artwork from {safe_url_for_log(artwork_url)}")
 
             headers = {
                 'User-Agent': BROWSER_USER_AGENT,

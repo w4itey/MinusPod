@@ -6,7 +6,7 @@ import re
 import time
 from datetime import datetime, timezone
 from typing import Optional
-from flask import Blueprint, jsonify, request, Response, session
+from flask import Blueprint, abort, jsonify, request, Response, session
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from functools import wraps
@@ -44,12 +44,13 @@ _start_time = _init_server_start_time()
 
 api = Blueprint('api', __name__, url_prefix='/api/v1')
 
-# Rate limiter - will be initialized when blueprint is registered with app
-# Default limits: 200 requests per minute, 1000 per hour
+# memory:// storage is per-worker; with workers=2 the effective limit is
+# 2x declared. Set RATE_LIMIT_STORAGE_URI=redis://<host>:6379 to share
+# counters across workers and get exact declared limits.
 limiter = Limiter(
     key_func=get_remote_address,
     default_limits=["200 per minute", "1000 per hour"],
-    storage_uri="memory://",
+    storage_uri=os.environ.get('RATE_LIMIT_STORAGE_URI', 'memory://'),
 )
 
 
@@ -141,6 +142,28 @@ def get_database():
     """Get database instance."""
     from database import Database
     return Database()
+
+
+@api.url_value_preprocessor
+def _guard_slug_param(_endpoint, values):
+    """Reject dangerous slugs before route handlers run.
+
+    Reads use :func:`is_dangerous_slug` (accepts legacy uppercase /
+    underscore subscription URLs while still blocking traversal).
+    Writes use :func:`is_valid_slug` (strict canonical regex) so a
+    typo'd slug fails at 400 instead of making it to storage.
+    """
+    if not values or 'slug' not in values:
+        return
+    from utils.validation import is_valid_slug, is_dangerous_slug
+    slug = values['slug']
+    method = request.method
+    if method in ('GET', 'HEAD', 'OPTIONS'):
+        if is_dangerous_slug(slug):
+            abort(error_response('invalid slug', 404))
+    else:
+        if not is_valid_slug(slug):
+            abort(error_response('invalid slug', 400))
 
 
 def log_request(f):

@@ -26,7 +26,7 @@ MinusPod is a self-hosted server that removes ads before you ever hit play. It t
 - [LLM Pricing](#llm-pricing)
 - [API](#api)
 - [Webhooks](#webhooks)
-- [Remote Access](#remote-access)
+- [Remote Access / Security](#remote-access--security)
 - [Data Storage](#data-storage)
 - [Custom Assets (Optional)](#custom-assets-optional)
 - [Disclaimer](#disclaimer)
@@ -386,6 +386,10 @@ This is a comma-separated list of domains excluded from Audiobookshelf's SSRF fi
 
 ## Environment Variables
 
+Grouped by how often you'll touch them. **Standard** is what a typical deployment sets; **Security** is the 2.0.0 hardening surface; **Advanced** are tuning knobs for edge cases; **Optional** are opt-in features.
+
+### Standard
+
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `ANTHROPIC_API_KEY` | _(none)_ | Claude API key (required when `LLM_PROVIDER=anthropic`, not needed for Ollama) |
@@ -396,34 +400,60 @@ This is a comma-separated list of domains excluded from Audiobookshelf's SSRF fi
 | `OPENAI_MODEL` | _(none)_ | Model for OpenAI-compatible/Ollama providers. **Required for Ollama** (e.g. `qwen3:14b`). Defaults to `claude-sonnet-4-5-20250929` for openai-compatible if unset. |
 | `BASE_URL` | `http://localhost:8000` | Public URL for generated feed links |
 | `UI_BASE_URL` | _(falls back to BASE_URL)_ | Public URL for UI links in webhooks (set if UI is on a different domain than feeds) |
-| `WHISPER_MODEL` | `small` | Whisper model size. Supports faster-whisper model names: `tiny`, `base`, `small`, `medium`, `large-v3`, `turbo`, plus `.en` variants (e.g. `small.en`) for English-only |
-| `WHISPER_DEVICE` | `cuda` | Device for Whisper (cuda/cpu). Set to `cpu` when using API backend to skip GPU init. |
-| `WHISPER_BACKEND` | `local` | Whisper backend: `local` (faster-whisper) or `openai-api` (remote HTTP) |
-| `WHISPER_API_BASE_URL` | _(none)_ | Base URL for OpenAI-compatible whisper API (e.g. `http://host.docker.internal:8765/v1`) |
-| `WHISPER_API_KEY` | _(none)_ | API key for whisper API (optional for local servers) |
+| `WHISPER_MODEL` | `small` | Whisper model size. `tiny`, `base`, `small`, `medium`, `large-v3`, `turbo`, plus `.en` variants |
+| `WHISPER_DEVICE` | `cuda` | `cuda` or `cpu`. Set to `cpu` when using API backend to skip GPU init. |
+| `WHISPER_BACKEND` | `local` | `local` (faster-whisper) or `openai-api` (remote HTTP) |
+| `WHISPER_API_BASE_URL` | _(none)_ | Base URL for OpenAI-compatible whisper API |
+| `WHISPER_API_KEY` | _(none)_ | API key for whisper API |
 | `WHISPER_API_MODEL` | `whisper-1` | Model name sent to whisper API |
-| `WHISPER_LANGUAGE` | `en` | ISO 639-1 language code for transcription (e.g. `en`, `fi`, `es`), or `auto` to let Whisper detect. Seeds fresh installs only -- runtime value lives in the settings table, editable under Settings > Transcription. See [supported languages](https://whisper-api.com/docs/languages/). |
-| `PROCESSING_SOFT_TIMEOUT` | `3600` | Seconds before a stuck job is auto-cleared from the queue. Seeds fresh installs only -- runtime value lives in the settings table, editable under Settings > Transcription or via `PUT /api/v1/settings/processing-timeouts`. Raise this for long episodes on CPU or the largest Whisper model. |
-| `PROCESSING_HARD_TIMEOUT` | `7200` | Seconds before the processing lock is force-released even when a worker is still holding it (stuck subprocess safety net). Same DB-backed override path as the soft timeout. Must exceed it. |
-| `RETENTION_PERIOD` | `1440` | **Deprecated.** Legacy minutes-based retention (auto-converted to days on first startup). Use the Settings UI or `PUT /api/v1/settings/retention` instead. Retention now resets episodes to "discovered" instead of deleting them. |
-| `AD_DETECTION_MAX_TOKENS` | `2000` | Maximum tokens for LLM ad detection responses (increase if responses are being truncated) |
+| `WHISPER_LANGUAGE` | `en` | ISO 639-1 language code, or `auto`. Seeds fresh installs only; runtime value is in Settings > Transcription. |
 | `APP_PASSWORD` | _(none)_ | Initial password for web UI (can also be set in Settings > Security) |
-| `OLLAMA_API_KEY` | _(none)_ | Ollama Cloud key. Leave unset for local. Can also be set in Settings > LLM Provider (encrypted). |
-| `MINUSPOD_MASTER_PASSPHRASE` | _(none)_ | Unlocks the encrypted provider-key store. Without it, the UI shows "Setup required" and only env-var keys are used. Keep it stable — lose it and stored keys become unreadable (env fallback still works). |
-| `LOG_LEVEL` | `INFO` | Logging level (DEBUG, INFO, WARNING, ERROR) |
-| `DATA_DIR` | `/app/data` | Data storage directory |
-| `PODCAST_INDEX_API_KEY` | _(none)_ | PodcastIndex.org API key for podcast search (or configure in Settings) |
+| `OLLAMA_API_KEY` | _(none)_ | Ollama Cloud key. Leave unset for local. |
+| `PODCAST_INDEX_API_KEY` | _(none)_ | PodcastIndex.org API key for podcast search |
 | `PODCAST_INDEX_API_SECRET` | _(none)_ | PodcastIndex.org API secret |
-| `TUNNEL_TOKEN` | _(none)_ | Cloudflare tunnel token for remote access |
-| `SESSION_COOKIE_SECURE` | `true` | Whether the session cookie carries the `Secure` flag. Leave on for HTTPS deployments (default). Set to `false` only when serving over plain HTTP (e.g. LAN-only). |
-| `SESSION_COOKIE_SAMESITE` | `Strict` | `SameSite` attribute for the session cookie. `Strict` blocks every cross-site navigation from attaching the cookie; change to `Lax` only if an integration needs it. |
-| `MINUSPOD_ENABLE_HSTS` | `false` | When `true`, responses carry `Strict-Transport-Security: max-age=31536000; includeSubDomains`. Keep off on plain-HTTP deployments (HSTS traps browsers into HTTPS-only). |
-| `MINUSPOD_TRUSTED_PROXY_COUNT` | `0` | Number of reverse-proxy hops to trust when reading `X-Forwarded-For`. Login lockout keys on the real client IP; set to `1` behind a single Cloudflare/nginx hop, higher behind a multi-hop chain. Startup logs a WARN if this is unset in a container. |
+| `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, or `ERROR` |
+| `DATA_DIR` | `/app/data` | Data storage directory |
+
+### Security
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MINUSPOD_MASTER_PASSPHRASE` | _(unset)_ | Unlocks encrypted provider-key store. Strongly recommended for production; first boot migrates any plaintext rows to `enc:v1:`. Losing it makes stored keys unrecoverable (env fallback still works). |
+| `SESSION_COOKIE_SECURE` | `true` | Set to `false` only when serving over plain HTTP. |
+| `SESSION_COOKIE_SAMESITE` | `Strict` | Override to `Lax` only if a specific integration breaks. |
+| `MINUSPOD_ENABLE_HSTS` | `false` | Set to `true` once the deployment is HTTPS-only. HSTS traps browsers so don't flip this on a dual-protocol setup. |
+| `MINUSPOD_TRUSTED_PROXY_COUNT` | `0` | Reverse-proxy hops to trust when reading `X-Forwarded-For`. `1` behind Cloudflare / nginx; higher behind a multi-proxy chain. Needed for login lockout to key on the real client IP. |
+
+### Advanced
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PROCESSING_SOFT_TIMEOUT` | `3600` | Seconds before a stuck job is auto-cleared. Seeds fresh installs; runtime value lives in Settings > Transcription. |
+| `PROCESSING_HARD_TIMEOUT` | `7200` | Seconds before the processing lock is force-released. Must exceed the soft timeout. |
+| `AD_DETECTION_MAX_TOKENS` | `2000` | Max tokens for LLM ad detection responses. |
 | `MINUSPOD_MAX_ARTWORK_BYTES` | `5242880` (5 MB) | Cap on podcast artwork download size. Clamped to `[65536, 52428800]`. |
-| `APP_UID` / `APP_GID` | `1000` / `1000` | Override the UID/GID that gunicorn runs as inside the container. Useful when the data volume is owned by a different UID on the host. |
-| `SENTRY_DSN` | _(none)_ | When set (and `sentry-sdk` is installed), errors flow to Sentry. Headers, cookies, CSRF tokens, and credential-like query params are scrubbed before send; performance tracing is disabled. |
-| `MINUSPOD_RELEASE` | _(none)_ | Optional release tag forwarded to `sentry_sdk.init(release=...)`. |
+| `MINUSPOD_MAX_RSS_BYTES` | `209715200` (200 MB) | Cap on RSS response body size. Floor is 1 MB. |
+| `RATE_LIMIT_STORAGE_URI` | `memory://` | Flask-limiter storage backend. Default is per-worker; set to `redis://host:6379` + run a Redis sidecar for exact declared limits across workers. |
+| `APP_UID` | `1000` | UID gunicorn runs as inside the container. Override to match host volume ownership. |
+| `APP_GID` | `1000` | GID counterpart to `APP_UID`. |
+| `GUNICORN_WORKERS` | `2` | Worker count. Lower means single-threaded UI blocking during RSS refresh; higher multiplies per-worker rate-limit counters (when using `memory://`). |
+| `GUNICORN_TIMEOUT` | `600` | Per-request hard timeout. |
+| `GUNICORN_GRACEFUL_TIMEOUT` | `330` | Seconds between SIGTERM and SIGKILL on shutdown. |
+
+### Optional
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `TUNNEL_TOKEN` | _(none)_ | Cloudflare tunnel token. See Remote Access / Security > Before enabling the tunnel profile. |
+| `SENTRY_DSN` | _(none)_ | Opt-in Sentry. Requires `sentry-sdk` installed. Headers, cookies, CSRF tokens, and credential-like query params are scrubbed before send; no performance tracing. |
+| `MINUSPOD_RELEASE` | _(none)_ | Optional release tag forwarded to Sentry. |
 | `SENTRY_ENVIRONMENT` | `production` | Environment tag forwarded to Sentry. |
+
+### Deprecated
+
+| Variable | Description |
+|----------|-------------|
+| `RETENTION_PERIOD` | Legacy minutes-based retention. Auto-converted to days on first startup. Use Settings UI or `PUT /api/v1/settings/retention` instead. |
 
 ### Using Claude Code Wrapper (Max Subscription)
 
@@ -981,7 +1011,7 @@ ntfy requires a custom payload template to match its expected JSON format.
 
 If a webhook has a secret configured, MinusPod adds an `X-MinusPod-Signature: sha256=<hmac>` header to each POST, computed with HMAC-SHA256 over the request body.
 
-## Remote Access
+## Remote Access / Security
 
 The docker-compose includes an optional Cloudflare tunnel service for secure remote access without port forwarding:
 

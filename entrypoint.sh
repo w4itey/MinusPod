@@ -47,11 +47,9 @@ if [[ "$(id -u)" == "0" ]]; then
     chown "${APP_UID}:${APP_GID}" /app/gunicorn.conf.py 2>/dev/null || true
 
     cd /app/src
-    exec gosu minuspod gunicorn --bind 0.0.0.0:8000 --workers 2 --threads 8 \
-        --timeout 600 --graceful-timeout 330 --access-logfile - main_app:app
+    exec gosu minuspod gunicorn -c /app/gunicorn.conf.py main_app:app
 fi
 
 # Non-root invocation path (operator used --user). Run directly.
 cd /app/src
-exec gunicorn --bind 0.0.0.0:8000 --workers 2 --threads 8 \
-    --timeout 600 --graceful-timeout 330 --access-logfile - main_app:app
+exec gunicorn -c /app/gunicorn.conf.py main_app:app

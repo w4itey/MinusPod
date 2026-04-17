@@ -14,7 +14,8 @@ from config import APP_USER_AGENT
 from utils.circuit_breaker import CircuitBreaker, CircuitBreakerOpen
 from utils.time import parse_iso_datetime
 from utils.url import SSRFError
-from utils.safe_http import URLTrust, safe_get
+from utils.http import safe_url_for_log
+from utils.safe_http import ResponseTooLargeError, URLTrust, read_response_capped, safe_get
 
 
 _FEED_CONTENT_TYPES = frozenset({
@@ -24,6 +25,18 @@ _FEED_CONTENT_TYPES = frozenset({
     'text/xml',
     'application/octet-stream',  # common fallback from static hosts
 })
+
+
+def _max_rss_bytes() -> int:
+    """Cap the RSS body size the parser is willing to ingest. Default 200 MB
+    covers the largest legitimate feeds (3k+ episodes); operators with
+    pathological feeds can raise via ``MINUSPOD_MAX_RSS_BYTES``. Floor at
+    1 MB so a typo can't starve legitimate feeds."""
+    try:
+        raw = int(os.environ.get('MINUSPOD_MAX_RSS_BYTES', 200 * 1024 * 1024))
+    except ValueError:
+        raw = 200 * 1024 * 1024
+    return max(1 * 1024 * 1024, raw)
 
 
 def _content_type_looks_like_feed(header_value: str | None) -> bool:
@@ -72,12 +85,13 @@ class RSSParser:
             return None
 
         try:
-            logger.info(f"Fetching RSS feed from: {url}")
+            logger.info(f"Fetching RSS feed from: {safe_url_for_log(url)}")
             response = safe_get(
                 url,
                 trust=URLTrust.OPERATOR_CONFIGURED,
                 timeout=timeout,
                 max_redirects=5,
+                stream=True,
             )
             response.raise_for_status()
             if not _content_type_looks_like_feed(response.headers.get('Content-Type')):
@@ -87,11 +101,21 @@ class RSSParser:
                 )
                 _get_rss_circuit_breaker(url).record_failure()
                 return None
-            logger.info(f"Successfully fetched RSS feed, size: {len(response.content)} bytes")
+            max_bytes = _max_rss_bytes()
+            try:
+                body = read_response_capped(response, max_bytes)
+            except ResponseTooLargeError:
+                logger.warning(
+                    "feed_size_cap_exceeded: url=%s max=%d",
+                    safe_url_for_log(url), max_bytes,
+                )
+                _get_rss_circuit_breaker(url).record_failure()
+                return None
+            logger.info(f"Successfully fetched RSS feed, size: {len(body)} bytes")
             _get_rss_circuit_breaker(url).record_success()
-            return response.text
+            return body.decode('utf-8', errors='replace')
         except SSRFError as e:
-            logger.warning(f"SSRF blocked in fetch_feed: {e} (url={url})")
+            logger.warning(f"SSRF blocked in fetch_feed: {e} (url={safe_url_for_log(url)})")
             return None
         except requests.exceptions.ContentDecodingError as e:
             # Some servers claim gzip encoding but send malformed data
@@ -158,7 +182,7 @@ class RSSParser:
             )
 
             if response.status_code == 304:
-                logger.info(f"Feed not modified (304): {url}")
+                logger.info(f"Feed not modified (304): {safe_url_for_log(url)}")
                 _get_rss_circuit_breaker(url).record_success()
                 return None, etag, last_modified
 
@@ -172,7 +196,7 @@ class RSSParser:
             return response.text, new_etag, new_last_modified
 
         except SSRFError as e:
-            logger.warning(f"SSRF blocked in fetch_feed_conditional: {e} (url={url})")
+            logger.warning(f"SSRF blocked in fetch_feed_conditional: {e} (url={safe_url_for_log(url)})")
             return None, None, None
 
         except requests.exceptions.ContentDecodingError as e:

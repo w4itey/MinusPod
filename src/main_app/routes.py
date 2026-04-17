@@ -173,22 +173,18 @@ def register_routes(app):
 
     # ========== API Documentation ==========
 
-    @app.route('/docs')
-    @app.route('/docs/')
-    def swagger_ui():
-        """Serve Swagger UI for API documentation."""
-        return '''<!DOCTYPE html>
+    _SWAGGER_HTML = '''<!DOCTYPE html>
 <html>
 <head>
     <title>MinusPod API</title>
-    <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
+    <link rel="stylesheet" type="text/css" href="/ui/swagger/swagger-ui.css">
 </head>
 <body>
     <div id="swagger-ui"></div>
-    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+    <script src="/ui/swagger/swagger-ui-bundle.js"></script>
     <script>
         SwaggerUIBundle({
-            url: "/openapi.yaml",
+            url: "/api/v1/openapi.yaml",
             dom_id: '#swagger-ui',
             presets: [SwaggerUIBundle.presets.apis, SwaggerUIBundle.SwaggerUIStandalonePreset],
             layout: "BaseLayout"
@@ -196,6 +192,19 @@ def register_routes(app):
     </script>
 </body>
 </html>'''
+
+    @app.route('/api/v1/docs')
+    @app.route('/api/v1/docs/')
+    def swagger_ui():
+        """Serve Swagger UI for API documentation (assets bundled locally)."""
+        return _SWAGGER_HTML
+
+    # Back-compat: legacy /docs redirects to /api/v1/docs.
+    @app.route('/docs')
+    @app.route('/docs/')
+    def swagger_ui_legacy():
+        from flask import redirect
+        return redirect('/api/v1/docs', code=301)
 
     @lru_cache(maxsize=1)
     def _render_openapi_yaml(openapi_path_str: str, version: str) -> str:
@@ -214,7 +223,7 @@ def register_routes(app):
             flags=re.MULTILINE,
         )
 
-    @app.route('/openapi.yaml')
+    @app.route('/api/v1/openapi.yaml')
     def serve_openapi():
         """Serve OpenAPI specification with dynamic version."""
         openapi_path = ROOT_DIR / 'openapi.yaml'
@@ -226,6 +235,12 @@ def register_routes(app):
             return Response(content, mimetype='application/x-yaml')
         except Exception:
             return send_file(openapi_path, mimetype='application/x-yaml')
+
+    # Back-compat: legacy /openapi.yaml redirects to /api/v1/openapi.yaml.
+    @app.route('/openapi.yaml')
+    def serve_openapi_legacy():
+        from flask import redirect
+        return redirect('/api/v1/openapi.yaml', code=301)
 
     # ========== Browser Icon Routes ==========
     # Short-circuit favicon/apple-touch-icon requests so they don't fall through

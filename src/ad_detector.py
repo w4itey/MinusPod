@@ -1103,8 +1103,11 @@ class AdDetector:
     def get_available_models(self) -> List[Dict]:
         """Get list of available models from LLM provider.
 
-        Ensures currently configured models always appear in the list,
-        even if the API doesn't advertise them.
+        The underlying ``self._llm_client.list_models()`` already caches
+        per-provider with a 5-minute TTL (see ``_model_list_cache`` in
+        llm_client.py); no extra wrapping here. Ensures currently-configured
+        models always appear in the list, even if the API doesn't advertise
+        them.
         """
         try:
             self.initialize_client()

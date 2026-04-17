@@ -436,7 +436,12 @@ def get_available_models():
 @api.route('/settings/models/refresh', methods=['POST'])
 @log_request
 def refresh_models():
-    """Force refresh the model list from the LLM provider."""
+    """Force refresh the model list from the LLM provider.
+
+    ``get_llm_client(force_new=True)`` rebuilds the client and clears
+    ``_model_list_cache`` in llm_client, so the next ``list_models()``
+    call repopulates from upstream.
+    """
     from ad_detector import AdDetector
 
     get_llm_client(force_new=True)

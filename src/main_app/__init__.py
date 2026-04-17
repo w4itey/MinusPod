@@ -269,20 +269,48 @@ if not os.environ.get('OPENAI_API_KEY') and os.environ.get('ANTHROPIC_API_KEY'):
     )
 
 
-def get_or_create_secret_key():
-    """Get secret key from database or create and persist one.
+# Gunicorn workers are independent processes, so an OS-level flock is
+# what keeps concurrent first-boot races from minting two different
+# keys. Without it, a stray second winner invalidates sessions held by
+# the first winner's cookies.
+_SECRET_KEY_LOCKFILE = Path(os.environ.get('DATA_PATH', '/app/data')) / '.secret_key.lock'
 
-    This ensures all Gunicorn workers use the same key, preventing
-    session validation failures when requests hit different workers.
-    """
+
+def get_or_create_secret_key():
+    """Get secret key from database or create and persist one under flock."""
     from database import Database
     _db = Database()
 
     secret_key = _db.get_setting('flask_secret_key')
-    if not secret_key:
-        secret_key = secrets.token_hex(32)
-        _db.set_setting('flask_secret_key', secret_key)
-        logger.info("Generated and persisted new Flask secret key")
+    if secret_key:
+        return secret_key
+
+    try:
+        _SECRET_KEY_LOCKFILE.parent.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+    try:
+        lock_fd = os.open(str(_SECRET_KEY_LOCKFILE), os.O_CREAT | os.O_RDWR, 0o600)
+    except OSError as exc:
+        logger.warning("Secret-key lockfile unavailable (%s); proceeding without flock", exc)
+        lock_fd = None
+
+    try:
+        if lock_fd is not None:
+            fcntl.flock(lock_fd, fcntl.LOCK_EX)
+
+        secret_key = _db.get_setting('flask_secret_key')
+        if not secret_key:
+            secret_key = secrets.token_hex(32)
+            _db.set_setting('flask_secret_key', secret_key)
+            logger.info("Generated and persisted new Flask secret key")
+    finally:
+        if lock_fd is not None:
+            try:
+                fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            except OSError:
+                pass
+            os.close(lock_fd)
 
     return secret_key
 

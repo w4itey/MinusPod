@@ -1,5 +1,5 @@
 # Stage 1: Build frontend
-FROM node:20-alpine AS frontend-builder
+FROM node:20-alpine@sha256:afdf98210b07b586eb71fa22ba2e432e058e4cd1304d31ed60888755b8c865fb AS frontend-builder
 
 WORKDIR /app/frontend
 
@@ -14,6 +14,14 @@ COPY frontend/ ./
 
 # Build frontend
 RUN npm run build
+
+# Copy Swagger UI assets into the built static dir so the /docs route
+# can serve them locally (no third-party CDN).
+RUN mkdir -p /app/static/ui/swagger \
+    && cp node_modules/swagger-ui-dist/swagger-ui.css \
+          node_modules/swagger-ui-dist/swagger-ui-bundle.js \
+          node_modules/swagger-ui-dist/swagger-ui-standalone-preset.js \
+          /app/static/ui/swagger/
 
 # Stage 2: Python application
 # Use CUDA runtime image - PyTorch bundles its own cuDNN/cuBLAS via pip

@@ -13,6 +13,7 @@ from utils.audio import get_audio_duration
 from utils.time import format_vtt_timestamp
 from utils.gpu import clear_gpu_memory, get_available_memory_gb, get_gpu_memory_info
 from utils.url import SSRFError
+from utils.http import safe_url_for_log
 from utils.safe_http import URLTrust, safe_get, safe_post
 from config import (
     API_CHUNK_DURATION_SECONDS,
@@ -932,7 +933,7 @@ class Transcriber:
             timeout: (connect_timeout, read_timeout) in seconds
         """
         try:
-            logger.info(f"Downloading audio from: {url}")
+            logger.info(f"Downloading audio from: {safe_url_for_log(url)}")
             headers = {
                 'User-Agent': BROWSER_USER_AGENT,
                 'Accept': '*/*',
@@ -994,7 +995,7 @@ class Transcriber:
         downloaded = 0
         if os.path.exists(temp_path):
             downloaded = os.path.getsize(temp_path)
-            logger.info(f"Resuming download from {downloaded} bytes: {url}")
+            logger.info(f"Resuming download from {downloaded} bytes: {safe_url_for_log(url)}")
 
         headers = {
             'User-Agent': f'Mozilla/5.0 (compatible; {APP_USER_AGENT})',

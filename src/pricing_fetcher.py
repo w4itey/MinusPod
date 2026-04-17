@@ -19,6 +19,7 @@ from config import (
     normalize_model_key,
     PRICING_CACHE_TTL,
 )
+from utils.http import safe_url_for_log
 from utils.safe_http import URLTrust, safe_get
 from utils.time import parse_iso_datetime
 from utils.url import SSRFError
@@ -117,7 +118,7 @@ def fetch_pricepertoken_pricing(url: str) -> List[Dict]:
     results = []
     table = soup.find('table')
     if not table:
-        logger.warning(f"No pricing table found at {url}")
+        logger.warning(f"No pricing table found at {safe_url_for_log(url)}")
         return results
 
     rows = table.find_all('tr')
@@ -127,7 +128,7 @@ def fetch_pricepertoken_pricing(url: str) -> List[Dict]:
     # Detect column positions from header row
     header_cells = rows[0].find_all('th')
     if not header_cells:
-        logger.warning(f"No header row found in pricing table at {url}")
+        logger.warning(f"No header row found in pricing table at {safe_url_for_log(url)}")
         return results
 
     headers = [th.get_text(strip=True).lower() for th in header_cells]
@@ -202,7 +203,7 @@ def fetch_pricing(source: dict) -> List[Dict]:
         return []
 
     url = source.get('url', '')
-    logger.info(f"Fetching pricing from {source_type}: {url}")
+    logger.info(f"Fetching pricing from {source_type}: {safe_url_for_log(url)}")
 
     try:
         if source_type == 'openrouter_api':
@@ -216,7 +217,7 @@ def fetch_pricing(source: dict) -> List[Dict]:
         return results
 
     except Exception as e:
-        logger.warning(f"Failed to fetch pricing from {url}: {e}")
+        logger.warning(f"Failed to fetch pricing from {safe_url_for_log(url)}: {e}")
         return []
 
 

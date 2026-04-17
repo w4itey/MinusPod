@@ -13,6 +13,7 @@ from typing import Optional
 from jinja2 import TemplateError
 from jinja2.sandbox import SandboxedEnvironment
 
+from utils.http import safe_url_for_log
 from utils.safe_http import URLTrust, safe_post
 from utils.time import utc_now_iso
 from utils.url import validate_url, SSRFError
@@ -143,7 +144,7 @@ def _prepare_and_dispatch(webhook_config, context, add_test_flag=False,
     try:
         validate_url(url)
     except SSRFError as exc:
-        logger.warning("Webhook URL blocked by SSRF check at dispatch time: %s (%s)", url, exc)
+        logger.warning("Webhook URL blocked by SSRF check at dispatch time: %s (%s)", safe_url_for_log(url), exc)
         return None
 
     if add_test_flag:
@@ -157,7 +158,7 @@ def _prepare_and_dispatch(webhook_config, context, add_test_flag=False,
         try:
             body_str = _render_template(template_str, context)
         except TemplateError as exc:
-            logger.error("Jinja2 render error for webhook %s, skipping: %s", url, exc)
+            logger.error("Jinja2 render error for webhook %s, skipping: %s", safe_url_for_log(url), exc)
             return None
     else:
         payload = dict(context)
@@ -190,7 +191,7 @@ def _prepare_and_dispatch(webhook_config, context, add_test_flag=False,
                 headers=headers,
             )
         except SSRFError as exc:
-            logger.warning("Webhook URL blocked mid-redirect: %s (%s)", url, exc)
+            logger.warning("Webhook URL blocked mid-redirect: %s (%s)", safe_url_for_log(url), exc)
             return None
         except Exception as exc:
             logger.warning(
@@ -204,7 +205,7 @@ def _prepare_and_dispatch(webhook_config, context, add_test_flag=False,
             break
 
     if last_status is not None:
-        logger.info("Webhook delivered to %s (status %d)", url, last_status)
+        logger.info("Webhook delivered to %s (status %d)", safe_url_for_log(url), last_status)
     return last_status
 
 
