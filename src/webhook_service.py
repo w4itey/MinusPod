@@ -13,6 +13,7 @@ from typing import Optional
 from jinja2 import TemplateError
 from jinja2.sandbox import SandboxedEnvironment
 
+from config import HTTP_MAX_REDIRECTS_API, HTTP_TIMEOUT_PROBE
 from utils.http import safe_url_for_log
 from utils.safe_http import URLTrust, safe_post
 from utils.time import utc_now_iso
@@ -24,8 +25,6 @@ EVENT_EPISODE_PROCESSED = 'Episode Processed'
 EVENT_EPISODE_FAILED = 'Episode Failed'
 EVENT_AUTH_FAILURE = 'Auth Failure'
 VALID_EVENTS = {EVENT_EPISODE_PROCESSED, EVENT_EPISODE_FAILED, EVENT_AUTH_FAILURE}
-
-_REQUEST_TIMEOUT_SECS = 5
 
 _sandbox_env = SandboxedEnvironment()
 
@@ -185,8 +184,8 @@ def _prepare_and_dispatch(webhook_config, context, add_test_flag=False,
             resp = safe_post(
                 url,
                 trust=URLTrust.OPERATOR_CONFIGURED,
-                timeout=_REQUEST_TIMEOUT_SECS,
-                max_redirects=3,
+                timeout=HTTP_TIMEOUT_PROBE,
+                max_redirects=HTTP_MAX_REDIRECTS_API,
                 data=body_bytes,
                 headers=headers,
             )

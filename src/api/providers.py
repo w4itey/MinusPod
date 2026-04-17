@@ -10,6 +10,7 @@ import requests
 from flask import request
 
 from api import api, error_response, json_response
+from config import HTTP_MAX_REDIRECTS_API, HTTP_TIMEOUT_PROBE
 from database import Database
 from secrets_crypto import CryptoUnavailableError, is_available as crypto_available, rotate as rotate_passphrase
 from utils.safe_http import URLTrust, safe_get
@@ -183,8 +184,8 @@ def test_provider(provider):
         r = safe_get(
             url,
             trust=URLTrust.OPERATOR_CONFIGURED,
-            timeout=5,
-            max_redirects=3,
+            timeout=HTTP_TIMEOUT_PROBE,
+            max_redirects=HTTP_MAX_REDIRECTS_API,
             headers=headers,
         )
     except SSRFError:

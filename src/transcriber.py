@@ -29,6 +29,11 @@ from config import (
     WHISPER_DEFAULT_PROFILE,
     BROWSER_USER_AGENT, APP_USER_AGENT,
     FFMPEG_LONG_TIMEOUT,
+    FFMPEG_SHORT_TIMEOUT,
+    FFMPEG_CHUNK_TIMEOUT,
+    HTTP_MAX_REDIRECTS_API,
+    HTTP_MAX_REDIRECTS_FEED,
+    HTTP_TIMEOUT_WHISPER,
 )
 
 # Suppress ONNX Runtime warnings before importing faster_whisper
@@ -173,7 +178,7 @@ def extract_audio_chunk(audio_path: str, start_time: float, end_time: float) -> 
         result = subprocess.run(
             cmd,
             capture_output=True,
-            timeout=120  # 2 minutes should be enough for any chunk
+            timeout=FFMPEG_CHUNK_TIMEOUT
         )
 
         if result.returncode == 0 and os.path.exists(output_path):
@@ -571,7 +576,7 @@ class Transcriber:
                 try:
                     ffmpeg_result = tracked_run(
                         ['ffmpeg', '-y', '-i', transcribe_path, '-c:a', 'flac', flac_path],
-                        capture_output=True, timeout=60,
+                        capture_output=True, timeout=FFMPEG_SHORT_TIMEOUT,
                     )
                     if ffmpeg_result.returncode == 0 and os.path.exists(flac_path):
                         transcribe_path = flac_path
@@ -641,8 +646,8 @@ class Transcriber:
                         response = safe_post(
                             url,
                             trust=URLTrust.OPERATOR_CONFIGURED,
-                            timeout=600,
-                            max_redirects=3,
+                            timeout=HTTP_TIMEOUT_WHISPER,
+                            max_redirects=HTTP_MAX_REDIRECTS_API,
                             files={'file': (os.path.basename(transcribe_path), audio_file)},
                             data=form_data,
                             headers=headers,
@@ -907,7 +912,11 @@ class Transcriber:
                 url,
                 trust=URLTrust.FEED_CONTENT,
                 timeout=timeout,
-                max_redirects=5,
+                # Megaphone / Art19 / simplecast often chain 6-8 redirects
+                # (CDN edge -> regional -> asset), and Acast adds analytics
+                # bouncers on top. Bumped to 10 so we don't false-fail
+                # CDN checks for legitimate feeds.
+                max_redirects=HTTP_MAX_REDIRECTS_FEED,
                 headers=headers,
             )
         except SSRFError as e:
@@ -944,7 +953,7 @@ class Transcriber:
                 url,
                 trust=URLTrust.FEED_CONTENT,
                 timeout=timeout,
-                max_redirects=10,
+                max_redirects=HTTP_MAX_REDIRECTS_FEED,
                 stream=True,
                 headers=headers,
             )
@@ -1010,7 +1019,7 @@ class Transcriber:
                 url,
                 trust=URLTrust.FEED_CONTENT,
                 timeout=(10, timeout),
-                max_redirects=10,
+                max_redirects=HTTP_MAX_REDIRECTS_FEED,
                 stream=True,
                 headers=headers,
             )

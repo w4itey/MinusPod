@@ -8,6 +8,7 @@ import requests
 from flask import request
 
 from api import api, log_request, json_response, error_response, get_database, limiter
+from config import HTTP_MAX_REDIRECTS_API, HTTP_TIMEOUT_API
 from utils.safe_http import URLTrust, safe_get
 from utils.url import SSRFError
 
@@ -67,8 +68,8 @@ def search_podcasts():
         resp = safe_get(
             endpoint,
             trust=URLTrust.OPERATOR_CONFIGURED,
-            timeout=10,
-            max_redirects=3,
+            timeout=HTTP_TIMEOUT_API,
+            max_redirects=HTTP_MAX_REDIRECTS_API,
             headers=headers,
         )
         resp.raise_for_status()

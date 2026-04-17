@@ -16,6 +16,8 @@ from bs4 import BeautifulSoup
 
 from config import (
     get_pricing_source,
+    HTTP_MAX_REDIRECTS_API,
+    HTTP_TIMEOUT_EXTERNAL,
     normalize_model_key,
     PRICING_CACHE_TTL,
 )
@@ -41,8 +43,8 @@ def fetch_openrouter_pricing() -> List[Dict]:
         resp = safe_get(
             'https://openrouter.ai/api/v1/models',
             trust=URLTrust.OPERATOR_CONFIGURED,
-            timeout=15,
-            max_redirects=3,
+            timeout=HTTP_TIMEOUT_EXTERNAL,
+            max_redirects=HTTP_MAX_REDIRECTS_API,
         )
         resp.raise_for_status()
     except (SSRFError, requests.RequestException) as exc:
@@ -106,8 +108,8 @@ def fetch_pricepertoken_pricing(url: str) -> List[Dict]:
         resp = safe_get(
             url,
             trust=URLTrust.OPERATOR_CONFIGURED,
-            timeout=15,
-            max_redirects=3,
+            timeout=HTTP_TIMEOUT_EXTERNAL,
+            max_redirects=HTTP_MAX_REDIRECTS_API,
         )
         resp.raise_for_status()
     except (SSRFError, requests.RequestException) as exc:

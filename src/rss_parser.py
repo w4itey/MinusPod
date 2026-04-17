@@ -10,7 +10,7 @@ import requests
 
 from urllib.parse import urlparse
 
-from config import APP_USER_AGENT
+from config import APP_USER_AGENT, HTTP_MAX_REDIRECTS_FEED
 from utils.circuit_breaker import CircuitBreaker, CircuitBreakerOpen
 from utils.time import parse_iso_datetime
 from utils.url import SSRFError
@@ -90,7 +90,7 @@ class RSSParser:
                 url,
                 trust=URLTrust.OPERATOR_CONFIGURED,
                 timeout=timeout,
-                max_redirects=5,
+                max_redirects=HTTP_MAX_REDIRECTS_FEED,
                 stream=True,
             )
             response.raise_for_status()
@@ -126,7 +126,7 @@ class RSSParser:
                     url,
                     trust=URLTrust.OPERATOR_CONFIGURED,
                     timeout=timeout,
-                    max_redirects=5,
+                    max_redirects=HTTP_MAX_REDIRECTS_FEED,
                     headers={'Accept-Encoding': 'identity'},
                 )
                 response.raise_for_status()
@@ -177,7 +177,7 @@ class RSSParser:
                 url,
                 trust=URLTrust.OPERATOR_CONFIGURED,
                 timeout=timeout,
-                max_redirects=5,
+                max_redirects=HTTP_MAX_REDIRECTS_FEED,
                 headers=headers,
             )
 
@@ -208,7 +208,7 @@ class RSSParser:
                     url,
                     trust=URLTrust.OPERATOR_CONFIGURED,
                     timeout=timeout,
-                    max_redirects=5,
+                    max_redirects=HTTP_MAX_REDIRECTS_FEED,
                     headers=headers,
                 )
                 if response.status_code == 304:

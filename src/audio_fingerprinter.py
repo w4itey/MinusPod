@@ -19,6 +19,12 @@ import json
 
 from utils.audio import get_audio_duration
 from utils.subprocess_registry import tracked_run
+from config import (
+    FFMPEG_SHORT_TIMEOUT,
+    FPCALC_TIMEOUT,
+    FPCALC_TIMEOUT_FULL,
+    SUBPROCESS_VERSION_PROBE,
+)
 
 logger = logging.getLogger('podcast.fingerprint')
 
@@ -88,7 +94,7 @@ class AudioFingerprinter:
                 result = subprocess.run(
                     [path, '-version'],
                     capture_output=True,
-                    timeout=5
+                    timeout=SUBPROCESS_VERSION_PROBE
                 )
                 if result.returncode == 0:
                     logger.debug(f"Found fpcalc at: {path}")
@@ -150,7 +156,7 @@ class AudioFingerprinter:
                     tracked_run(
                         ffmpeg_cmd,
                         capture_output=True,
-                        timeout=30,
+                        timeout=FFMPEG_SHORT_TIMEOUT,
                         check=True,
                     )
 
@@ -158,7 +164,7 @@ class AudioFingerprinter:
                     result = tracked_run(
                         cmd,
                         capture_output=True,
-                        timeout=30,
+                        timeout=FPCALC_TIMEOUT,
                     )
                 finally:
                     if os.path.exists(tmp_path):
@@ -168,7 +174,7 @@ class AudioFingerprinter:
                 result = tracked_run(
                     cmd,
                     capture_output=True,
-                    timeout=60,
+                    timeout=FPCALC_TIMEOUT,
                 )
 
             if result.returncode != 0:
@@ -294,7 +300,7 @@ class AudioFingerprinter:
 
         try:
             cmd = [self._fpcalc_path, '-raw', '-json', '-length', '0', audio_path]
-            result = tracked_run(cmd, capture_output=True, timeout=120)
+            result = tracked_run(cmd, capture_output=True, timeout=FPCALC_TIMEOUT_FULL)
 
             if result.returncode != 0:
                 logger.warning(f"Full-file fpcalc failed: {result.stderr.decode()}")

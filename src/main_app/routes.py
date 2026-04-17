@@ -13,7 +13,13 @@ from flask import Response, send_file, abort, send_from_directory, request
 from werkzeug.exceptions import NotFound
 from werkzeug.utils import safe_join
 
-from config import APP_USER_AGENT, JIT_RETRY_COOLDOWN_SECONDS, MAX_EPISODE_RETRIES
+from config import (
+    APP_USER_AGENT,
+    HTTP_MAX_REDIRECTS_FEED,
+    HTTP_TIMEOUT_API,
+    JIT_RETRY_COOLDOWN_SECONDS,
+    MAX_EPISODE_RETRIES,
+)
 from utils.safe_http import URLTrust, safe_head
 from utils.time import parse_iso_datetime
 from utils.url import SSRFError
@@ -112,8 +118,10 @@ def _head_upstream(slug, episode_id, original_url):
         resp = safe_head(
             original_url,
             trust=URLTrust.FEED_CONTENT,
-            timeout=10,
-            max_redirects=5,
+            timeout=HTTP_TIMEOUT_API,
+            # Real-world podcast CDNs (Megaphone, Art19, Acast, simplecast)
+            # chain 6-8 redirects per asset request.
+            max_redirects=HTTP_MAX_REDIRECTS_FEED,
             headers={'User-Agent': APP_USER_AGENT},
         )
     except SSRFError as e:

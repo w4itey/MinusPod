@@ -32,6 +32,7 @@ from urllib.parse import urlparse
 
 import requests
 
+from config import HTTP_MAX_REDIRECTS_API, HTTP_TIMEOUT_API, HTTP_TIMEOUT_FETCH
 from utils.url import SSRFError, validate_base_url, validate_url
 
 logger = logging.getLogger(__name__)
@@ -137,8 +138,8 @@ def safe_get(
     url: str,
     trust: URLTrust,
     *,
-    max_redirects: int = 5,
-    timeout: float = 30,
+    max_redirects: int = HTTP_MAX_REDIRECTS_API,
+    timeout: float = HTTP_TIMEOUT_FETCH,
     stream: bool = False,
     headers: Optional[dict] = None,
 ) -> requests.Response:
@@ -161,8 +162,8 @@ def safe_head(
     url: str,
     trust: URLTrust,
     *,
-    max_redirects: int = 5,
-    timeout: float = 10,
+    max_redirects: int = HTTP_MAX_REDIRECTS_API,
+    timeout: float = HTTP_TIMEOUT_API,
     headers: Optional[dict] = None,
 ) -> requests.Response:
     """HEAD ``url`` via a session that revalidates every redirect hop."""
@@ -178,8 +179,8 @@ def safe_post(
     url: str,
     trust: URLTrust,
     *,
-    max_redirects: int = 3,
-    timeout: float = 30,
+    max_redirects: int = HTTP_MAX_REDIRECTS_API,
+    timeout: float = HTTP_TIMEOUT_FETCH,
     data=None,
     json=None,
     files=None,

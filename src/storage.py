@@ -7,7 +7,7 @@ from typing import Dict, Any, Optional, List, Tuple
 import tempfile
 import shutil
 
-from config import BROWSER_USER_AGENT
+from config import BROWSER_USER_AGENT, HTTP_MAX_REDIRECTS_FEED, HTTP_TIMEOUT_FETCH
 from utils.http import safe_url_for_log
 from utils.url import SSRFError
 from utils.validation import is_dangerous_slug, is_valid_episode_id
@@ -460,8 +460,8 @@ class Storage:
                 response = safe_get(
                     artwork_url,
                     trust=URLTrust.FEED_CONTENT,
-                    max_redirects=5,
-                    timeout=30,
+                    max_redirects=HTTP_MAX_REDIRECTS_FEED,
+                    timeout=HTTP_TIMEOUT_FETCH,
                     stream=True,
                     headers=headers,
                 )

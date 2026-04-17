@@ -10,7 +10,7 @@ from typing import List, Dict, Optional
 
 from utils.audio import get_audio_duration
 from utils.subprocess_registry import tracked_run
-from config import FFMPEG_LONG_TIMEOUT
+from config import FFMPEG_LONG_TIMEOUT, SUBPROCESS_VERSION_PROBE
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ def _check_ffmpeg_once() -> bool:
     try:
         subprocess.run(
             ['ffmpeg', '-version'],
-            capture_output=True, check=True, timeout=5,
+            capture_output=True, check=True, timeout=SUBPROCESS_VERSION_PROBE,
         )
         return True
     except (subprocess.SubprocessError, FileNotFoundError):

@@ -32,6 +32,8 @@ from utils.circuit_breaker import CircuitBreaker, CircuitBreakerOpen
 from utils.http import safe_url_for_log
 
 from config import (
+    HTTP_MAX_REDIRECTS_API,
+    HTTP_TIMEOUT_API,
     LLM_TIMEOUT_DEFAULT,
     LLM_TIMEOUT_LOCAL,
     LLM_RETRY_MAX_RETRIES,
@@ -731,7 +733,7 @@ class OpenAICompatibleClient(LLMClient):
                     {"role": "user", "content": '{"test": true}'},
                 ],
                 response_format={"type": "json_object"},
-                timeout=10.0,
+                timeout=HTTP_TIMEOUT_API,
             )
             self._json_format_supported = True
             logger.info(f"Endpoint supports response_format json_object ({safe_url_for_log(self.base_url, keep_path=True)})")
@@ -780,8 +782,8 @@ class OpenAICompatibleClient(LLMClient):
             resp = safe_get(
                 url,
                 trust=URLTrust.OPERATOR_CONFIGURED,
-                timeout=10.0,
-                max_redirects=3,
+                timeout=HTTP_TIMEOUT_API,
+                max_redirects=HTTP_MAX_REDIRECTS_API,
             )
             resp.raise_for_status()
             data = resp.json()
@@ -1020,7 +1022,7 @@ def _verify_endpoint(label: str) -> bool:
         actual_url = getattr(client, 'base_url', 'unknown')
         logger.info(f"Verifying LLM endpoint: {safe_url_for_log(actual_url, keep_path=True)}")
         if hasattr(client, 'verify_connection'):
-            if not client.verify_connection(timeout=10.0):
+            if not client.verify_connection(timeout=HTTP_TIMEOUT_API):
                 logger.error(f"LLM endpoint unreachable: {safe_url_for_log(actual_url, keep_path=True)}")
                 logger.error("Ad detection and chapter generation will fail until this is resolved")
                 return False
