@@ -12,6 +12,7 @@ from flask import request
 from api import api, error_response, json_response
 from database import Database
 from secrets_crypto import CryptoUnavailableError, is_available as crypto_available, rotate as rotate_passphrase
+from utils.safe_http import URLTrust, safe_get
 from utils.secret_writes import SecretWriteRejected, set_or_clear_secret
 from utils.url import validate_base_url, SSRFError
 
@@ -179,7 +180,15 @@ def test_provider(provider):
         headers = {'Authorization': f'Bearer {api_key}'}
 
     try:
-        r = requests.get(url, headers=headers, timeout=5)
+        r = safe_get(
+            url,
+            trust=URLTrust.OPERATOR_CONFIGURED,
+            timeout=5,
+            max_redirects=3,
+            headers=headers,
+        )
+    except SSRFError:
+        return json_response({'ok': False, 'error': 'base URL failed SSRF validation'}, 200)
     except requests.RequestException:
         logger.exception("provider test failed for %s", provider)
         return json_response({'ok': False, 'error': 'connection failed'}, 200)

@@ -873,31 +873,31 @@ class Transcriber:
         Returns:
             Tuple of (available: bool, error_message: str or None)
         """
+        from utils.safe_http import safe_head
+        headers = {'User-Agent': BROWSER_USER_AGENT}
         try:
-            validate_url(url)
+            response = safe_head(
+                url,
+                trust=URLTrust.FEED_CONTENT,
+                timeout=timeout,
+                max_redirects=5,
+                headers=headers,
+            )
         except SSRFError as e:
             logger.warning(f"SSRF blocked in check_audio_availability: {e}")
             return False, f"URL blocked: {e}"
-
-        try:
-            headers = {
-                'User-Agent': BROWSER_USER_AGENT,
-            }
-            response = requests.head(url, headers=headers, timeout=timeout, allow_redirects=True)
-
-            if response.status_code == 200:
-                return True, None
-            elif response.status_code in (404, 403):
-                return False, f"CDN not ready ({response.status_code})"
-            elif response.status_code >= 500:
-                return False, f"CDN server error ({response.status_code})"
-            else:
-                # Other 2xx/3xx - proceed with download
-                return True, None
         except requests.exceptions.Timeout:
             return False, "CDN timeout"
         except requests.RequestException as e:
             return False, f"CDN check failed: {e}"
+
+        if response.status_code == 200:
+            return True, None
+        if response.status_code in (404, 403):
+            return False, f"CDN not ready ({response.status_code})"
+        if response.status_code >= 500:
+            return False, f"CDN server error ({response.status_code})"
+        return True, None
 
     def download_audio(self, url: str, timeout: tuple = (10, 300)) -> Optional[str]:
         """Download audio file from URL.
