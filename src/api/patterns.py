@@ -9,7 +9,7 @@ from utils.time import utc_now_iso, parse_iso_datetime
 from flask import request
 
 from api import (
-    api, log_request, json_response, error_response,
+    api, limiter, log_request, json_response, error_response,
     get_database, get_storage,
     extract_transcript_segment, extract_sponsor_from_text,
     _find_similar_pattern,
@@ -658,6 +658,7 @@ def export_patterns():
 
 
 @api.route('/patterns/import', methods=['POST'])
+@limiter.limit("3 per hour")
 @log_request
 def import_patterns():
     """Import patterns from JSON.

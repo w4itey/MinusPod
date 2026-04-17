@@ -15,6 +15,7 @@ from utils.gpu import clear_gpu_memory, get_available_memory_gb, get_gpu_memory_
 from utils.url import SSRFError
 from utils.http import safe_url_for_log
 from utils.safe_http import URLTrust, safe_get, safe_post
+from utils.subprocess_registry import tracked_run
 from config import (
     API_CHUNK_DURATION_SECONDS,
     WHISPER_BACKEND_LOCAL,
@@ -568,7 +569,7 @@ class Transcriber:
                 fd, flac_path = tempfile.mkstemp(suffix='.flac')
                 os.close(fd)
                 try:
-                    ffmpeg_result = subprocess.run(
+                    ffmpeg_result = tracked_run(
                         ['ffmpeg', '-y', '-i', transcribe_path, '-c:a', 'flac', flac_path],
                         capture_output=True, timeout=60,
                     )
@@ -861,7 +862,7 @@ class Transcriber:
             # e.g. 50MB file = 500s, 100MB = 1000s, floor at FFMPEG_LONG_TIMEOUT (300s)
             file_size_mb = os.path.getsize(input_path) / (1024 * 1024)
             preprocess_timeout = max(FFMPEG_LONG_TIMEOUT, int(file_size_mb * 10))
-            result = subprocess.run(cmd, capture_output=True, timeout=preprocess_timeout)
+            result = tracked_run(cmd, capture_output=True, timeout=preprocess_timeout)
             if result.returncode == 0:
                 logger.info(f"Audio preprocessed: {input_path} -> {output_path}")
                 success = True

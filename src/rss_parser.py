@@ -231,8 +231,37 @@ class RSSParser:
             return None, None, None
 
     def parse_feed(self, feed_content: str) -> Dict:
-        """Parse RSS feed content."""
+        """Parse RSS feed content.
+
+        XXE defence: ``defusedxml.defuse_stdlib()`` neutralises expat's
+        DOCTYPE / ENTITY handling at parse time, but feedparser swallows
+        the typed exception and surfaces it as a generic
+        SAXParseException('syntax error'). To surface a useful operator
+        signal, pre-scan the raw bytes for DOCTYPE / ENTITY markers and
+        emit the structured ``xml_forbidden_construct`` event BEFORE
+        handing the payload to feedparser.
+        """
         try:
+            # Normalise to bytes for the pre-scan; feedparser accepts either.
+            if isinstance(feed_content, str):
+                header_bytes = feed_content.encode('utf-8', errors='ignore')
+            else:
+                header_bytes = feed_content
+            # Only scan the first 4 KB; legitimate feeds declare their
+            # prolog up front, and this keeps the cost bounded.
+            header = header_bytes[:4096].lower()
+            if b'<!doctype' in header or b'<!entity' in header:
+                construct = 'DOCTYPE' if b'<!doctype' in header else 'ENTITY'
+                logger.warning(
+                    "XML forbidden construct in feed: %s",
+                    construct,
+                    extra={
+                        'event': 'xml_forbidden_construct',
+                        'construct': construct,
+                    },
+                )
+                return None
+
             feed = feedparser.parse(feed_content)
             if feed.bozo:
                 logger.warning(f"RSS parse warning: {feed.bozo_exception}")

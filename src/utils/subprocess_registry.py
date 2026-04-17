@@ -73,3 +73,74 @@ def tracked_popen(*args, **kwargs) -> Iterator[subprocess.Popen]:
         yield proc
     finally:
         unregister(proc)
+
+
+def tracked_run(
+    args,
+    *,
+    timeout: float | None = None,
+    check: bool = False,
+    input: bytes | None = None,
+    capture_output: bool = False,
+    stdout=None,
+    stderr=None,
+    stdin=None,
+    **kwargs,
+) -> subprocess.CompletedProcess:
+    """Drop-in replacement for ``subprocess.run`` that registers the child.
+
+    Long-running subprocesses (ffmpeg, whisper, chromaprint) can outlive
+    a SIGTERM to the gunicorn worker when called via ``subprocess.run``
+    because ``run`` blocks on the thread and the Python signal handler
+    only fires between C calls. If gunicorn then SIGKILLs the worker,
+    the subprocess becomes an orphan reparented to PID 1.
+
+    Using ``Popen`` + our registry lets ``terminate_all`` -- invoked
+    from the graceful-shutdown signal handler -- forward SIGTERM (then
+    SIGKILL after a deadline) to every tracked child so nothing leaks.
+    """
+    if capture_output:
+        if stdout is not None or stderr is not None:
+            raise ValueError("capture_output may not be used with stdout/stderr")
+        stdout = subprocess.PIPE
+        stderr = subprocess.PIPE
+
+    if input is not None:
+        if stdin is not None:
+            raise ValueError("input may not be used with stdin")
+        stdin = subprocess.PIPE
+
+    proc = subprocess.Popen(
+        args,
+        stdin=stdin,
+        stdout=stdout,
+        stderr=stderr,
+        **kwargs,
+    )
+    register(proc)
+    try:
+        try:
+            stdout_data, stderr_data = proc.communicate(input=input, timeout=timeout)
+        except subprocess.TimeoutExpired as e:
+            proc.kill()
+            # Drain pipes so FDs close and the child actually reaps.
+            drained_stdout, drained_stderr = proc.communicate()
+            # Mirror stdlib `subprocess.run` contract: populate the
+            # exception's stdout/stderr so callers that handle the
+            # timeout can still inspect what was produced.
+            e.stdout = drained_stdout
+            e.stderr = drained_stderr
+            raise
+        completed = subprocess.CompletedProcess(
+            args=args,
+            returncode=proc.returncode,
+            stdout=stdout_data,
+            stderr=stderr_data,
+        )
+        if check and completed.returncode != 0:
+            raise subprocess.CalledProcessError(
+                completed.returncode, args, completed.stdout, completed.stderr
+            )
+        return completed
+    finally:
+        unregister(proc)

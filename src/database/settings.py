@@ -60,13 +60,24 @@ class SettingsMixin:
         conn.commit()
 
     def reset_setting(self, key: str):
-        """Reset a setting to its default value."""
+        """Reset a setting to its default value.
+
+        Secret keys (provider api keys) get DELETEd so the env-var
+        fallback in ``llm_client`` takes over. Writing an empty-string
+        row would leave a residue that reads as "configured but empty"
+        and also trips the plaintext-secret read warning.
+        """
         # Import here to avoid circular import
         from database import DEFAULT_SYSTEM_PROMPT, DEFAULT_VERIFICATION_PROMPT
         from config import DEFAULT_AD_DETECTION_MODEL as DEFAULT_MODEL
         from chapters_generator import CHAPTERS_MODEL
         from config import PROVIDER_ANTHROPIC
         from llm_client import get_effective_provider
+        from secrets_crypto import SECRET_SETTING_KEYS
+
+        if key in SECRET_SETTING_KEYS:
+            self.clear_secret(key)
+            return True
 
         # Provider-aware defaults for model settings
         provider = get_effective_provider()
@@ -90,12 +101,10 @@ class SettingsMixin:
             'chapters_model': chapters_default,
             'llm_provider': os.environ.get('LLM_PROVIDER', 'anthropic'),
             'openai_base_url': os.environ.get('OPENAI_BASE_URL', 'http://localhost:8000/v1'),
-            'openrouter_api_key': '',  # Reset clears DB value; env var is read at runtime
             'min_cut_confidence': '0.80',
             'auto_process_enabled': 'true',
             'whisper_backend': os.environ.get('WHISPER_BACKEND', 'local'),
             'whisper_api_base_url': os.environ.get('WHISPER_API_BASE_URL', ''),
-            'whisper_api_key': '',  # Reset clears DB value; env var is read at runtime
             'whisper_api_model': os.environ.get('WHISPER_API_MODEL', 'whisper-1'),
         }
 

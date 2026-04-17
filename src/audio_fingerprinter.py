@@ -18,6 +18,7 @@ from typing import List, Optional, Tuple
 import json
 
 from utils.audio import get_audio_duration
+from utils.subprocess_registry import tracked_run
 
 logger = logging.getLogger('podcast.fingerprint')
 
@@ -146,28 +147,28 @@ class AudioFingerprinter:
                         tmp_path
                     ])
 
-                    subprocess.run(
+                    tracked_run(
                         ffmpeg_cmd,
                         capture_output=True,
                         timeout=30,
-                        check=True
+                        check=True,
                     )
 
                     cmd.append(tmp_path)
-                    result = subprocess.run(
+                    result = tracked_run(
                         cmd,
                         capture_output=True,
-                        timeout=30
+                        timeout=30,
                     )
                 finally:
                     if os.path.exists(tmp_path):
                         os.unlink(tmp_path)
             else:
                 cmd.append(audio_path)
-                result = subprocess.run(
+                result = tracked_run(
                     cmd,
                     capture_output=True,
-                    timeout=60
+                    timeout=60,
                 )
 
             if result.returncode != 0:
@@ -293,7 +294,7 @@ class AudioFingerprinter:
 
         try:
             cmd = [self._fpcalc_path, '-raw', '-json', '-length', '0', audio_path]
-            result = subprocess.run(cmd, capture_output=True, timeout=120)
+            result = tracked_run(cmd, capture_output=True, timeout=120)
 
             if result.returncode != 0:
                 logger.warning(f"Full-file fpcalc failed: {result.stderr.decode()}")
