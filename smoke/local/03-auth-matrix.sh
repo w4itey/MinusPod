@@ -12,20 +12,14 @@ for path in /api/v1/health /api/v1/auth/status; do
     assert_in "$code" "200 204" "exempt $path returns 2xx unauth"
 done
 
-# Fresh smoke container has no admin password set, so api.check_auth
-# short-circuits to public. Confirming 2xx here validates the exempt
-# path; the authenticated matrix is covered by 11-lockout.
-for path in /api/v1/feeds /api/v1/system/status /api/v1/history; do
+# 00-setup configures an admin password, so check_auth is live. Every
+# non-exempt endpoint must 401 when hit without a session cookie. SSE
+# used to be exempt-by-prefix; post-audit-gap-fix G01 removed the
+# exemption so the HTTP-level 401 is correct (frontend handles the
+# EventSource reconnect via /api/v1/auth/status probe).
+for path in /api/v1/feeds /api/v1/system/status /api/v1/history /api/v1/status/stream; do
     code=$(http_code "$LOCAL_BASE$path")
-    assert_in "$code" "200 204" "public-mode $path returns 2xx (no password set)"
+    assert_eq "$code" "401" "protected $path returns 401 unauth (got $code)"
 done
-
-# SSE stream: read first 4 lines within 3s and assert any SSE frame arrived.
-sse_body=$(curl -s --max-time 3 "$LOCAL_BASE/api/v1/status/stream" | head -4 || true)
-if printf '%s' "$sse_body" | grep -q '^\(event\|data\):'; then
-    pass_step '/status/stream emits SSE frames within 3s'
-else
-    fail_step "/status/stream did not emit any SSE frames within 3s (body='$sse_body')"
-fi
 
 finish_test "T03-auth-matrix"

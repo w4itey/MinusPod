@@ -55,7 +55,7 @@ csrf=$(curl -s -b "$REMOTE_COOKIES" "$REMOTE_BASE/api/v1/auth/status" \
 
 reproc_code=$(curl -s -o "$RESULTS_DIR/T16-reproc.json" -w '%{http_code}' \
     -b "$REMOTE_COOKIES" \
-    -X POST "$REMOTE_BASE/api/v1/episodes/$ep_id/reprocess" \
+    -X POST "$REMOTE_BASE/api/v1/episodes/$feed_id/$ep_id/reprocess" \
     -H "X-CSRF-Token: $csrf")
 note "reprocess HTTP $reproc_code"
 assert_in "$reproc_code" "200 202 204" "reprocess accepted"
@@ -64,7 +64,7 @@ assert_in "$reproc_code" "200 202 204" "reprocess accepted"
 deadline=$((SECONDS + 900))
 final_status=""
 while [ $SECONDS -lt $deadline ]; do
-    status=$(curl -s -b "$REMOTE_COOKIES" "$REMOTE_BASE/api/v1/episodes/$ep_id" \
+    status=$(curl -s -b "$REMOTE_COOKIES" "$REMOTE_BASE/api/v1/feeds/$feed_id/episodes/$ep_id" \
         | python3 -c 'import json,sys
 try:
     d=json.load(sys.stdin); print((d.get("status") or "").lower())
@@ -88,11 +88,13 @@ else
     fail_step "episode did not reach terminal status within 15min (last seen: '$final_status')"
 fi
 
-# 5) Artifact spot-checks
-for art in transcript chapters audio; do
-    code=$(http_code "$REMOTE_BASE/api/v1/episodes/$ep_id/$art")
-    assert_in "$code" "200 304" "artifact $art reachable (got $code)"
-done
+# 5) Artifact spot-checks (podcast-app paths, live at the app level)
+vtt_code=$(http_code "$REMOTE_BASE/episodes/$feed_id/$ep_id.vtt")
+assert_in "$vtt_code" "200 304 404" "VTT endpoint reachable (got $vtt_code)"
+chap_code=$(http_code "$REMOTE_BASE/episodes/$feed_id/$ep_id/chapters.json")
+assert_in "$chap_code" "200 304 404" "chapters endpoint reachable (got $chap_code)"
+mp3_code=$(http_code "$REMOTE_BASE/episodes/$feed_id/$ep_id.mp3")
+assert_in "$mp3_code" "200 206 304 404" "MP3 endpoint reachable (got $mp3_code)"
 
 note 'log scan for this window: orchestrator should run Grafana MCP query'
 note '  {container="minuspod"} |~ "ERROR" - filter by smoke timestamp range'

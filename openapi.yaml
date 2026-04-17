@@ -19,6 +19,12 @@ info:
     name: MIT
 
 servers:
+  # Same-origin relative URL. Swagger UI served from /api/v1/docs uses
+  # whatever host the browser is on, so "Try it out" always hits the
+  # correct server: localhost in dev, the production domain in prod,
+  # a Tailscale/Cloudflare URL on a tunnel, etc. No hardcoded host.
+  - url: /api/v1
+    description: Same-origin (current server)
   - url: http://localhost:8000/api/v1
     description: Local development server
   - url: '{baseUrl}/api/v1'
