@@ -270,6 +270,67 @@ def _try_become_background_leader() -> bool:
         return False
 
 
+def _init_sentry():
+    """Opt-in Sentry bootstrap.
+
+    Enabled only when both ``SENTRY_DSN`` and ``sentry-sdk`` are
+    available. Scrubs cookies, the ``Authorization`` and
+    ``X-CSRF-Token`` headers, and any URL-query key whose lowercased
+    name contains ``key``, ``secret``, ``token``, or ``password``
+    before events leave the process. Does not enable performance
+    tracing.
+    """
+    dsn = os.environ.get('SENTRY_DSN', '').strip()
+    if not dsn:
+        return
+
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.flask import FlaskIntegration
+    except ImportError:
+        audio_logger.warning(
+            "SENTRY_DSN is set but sentry-sdk is not installed; skipping Sentry init"
+        )
+        return
+
+    _SECRET_QUERY_HINTS = ('key', 'secret', 'token', 'password')
+
+    def _scrub(event, _hint):
+        request_data = event.get('request') or {}
+        headers = request_data.get('headers') or {}
+        for header in list(headers):
+            if header.lower() in ('authorization', 'cookie', 'x-csrf-token'):
+                headers[header] = '[scrubbed]'
+
+        query_string = request_data.get('query_string')
+        if isinstance(query_string, str) and '=' in query_string:
+            scrubbed_pairs = []
+            for pair in query_string.split('&'):
+                name, _, value = pair.partition('=')
+                if any(h in name.lower() for h in _SECRET_QUERY_HINTS):
+                    scrubbed_pairs.append(f"{name}=[scrubbed]")
+                else:
+                    scrubbed_pairs.append(pair)
+            request_data['query_string'] = '&'.join(scrubbed_pairs)
+
+        event.pop('_meta', None)
+        return event
+
+    sentry_sdk.init(
+        dsn=dsn,
+        integrations=[FlaskIntegration()],
+        traces_sample_rate=0.0,
+        send_default_pii=False,
+        before_send=_scrub,
+        release=os.environ.get('MINUSPOD_RELEASE') or None,
+        environment=os.environ.get('SENTRY_ENVIRONMENT') or 'production',
+    )
+    audio_logger.info("Sentry initialized (DSN configured)")
+
+
+_init_sentry()
+
+
 # Initialize Flask app
 app = Flask(__name__)
 
