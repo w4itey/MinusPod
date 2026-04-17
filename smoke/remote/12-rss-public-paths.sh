@@ -20,8 +20,8 @@ if [ -z "$slug" ]; then
 fi
 note "remote slug: $slug"
 
-# RSS endpoint requires PocketCasts UA per project rules for podfeed.* domain;
-# podsrv.* may not. Try without UA first; fall back with UA.
+# Some deployments require a PocketCasts User-Agent; others accept any UA.
+# Try without UA first; fall back with the PocketCasts UA.
 code=$(curl -s -o /dev/null -w '%{http_code}' "$REMOTE_BASE/$slug")
 if [ "$code" = "401" ] || [ "$code" = "403" ]; then
     fail_step "RSS /$slug requires auth on remote (got $code) - regression"

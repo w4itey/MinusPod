@@ -146,12 +146,14 @@ def get_database():
 
 @api.url_value_preprocessor
 def _guard_slug_param(_endpoint, values):
-    """Reject dangerous slugs before route handlers run.
+    """Reject dangerous slugs on every /api/v1/* route that takes one.
 
     Reads use :func:`is_dangerous_slug` (accepts legacy uppercase /
     underscore subscription URLs while still blocking traversal).
     Writes use :func:`is_valid_slug` (strict canonical regex) so a
-    typo'd slug fails at 400 instead of making it to storage.
+    typo'd slug fails at 400 instead of making it to storage. Public
+    ``/<slug>`` RSS and ``/episodes/<slug>/...`` routes are registered
+    at the app level and handled by the storage-layer slug guard instead.
     """
     if not values or 'slug' not in values:
         return
@@ -160,10 +162,10 @@ def _guard_slug_param(_endpoint, values):
     method = request.method
     if method in ('GET', 'HEAD', 'OPTIONS'):
         if is_dangerous_slug(slug):
-            abort(error_response('invalid slug', 404))
+            abort(404, description='invalid slug')
     else:
         if not is_valid_slug(slug):
-            abort(error_response('invalid slug', 400))
+            abort(400, description='invalid slug')
 
 
 def log_request(f):

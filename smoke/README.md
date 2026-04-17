@@ -7,7 +7,7 @@ security-audit checklist. Local instance is the same image as production.
 
 - `lib/common.sh` - shared helpers (curl wrapper, asserts, logging)
 - `local/` - tests against local container on port 8001 (destructive tests live here)
-- `remote/` - tests against `https://podsrv.ttlequals0.com` (read-only + T16 episode reprocess)
+- `remote/` - tests against `https://your-server.example.com` (read-only + T16 episode reprocess)
 - `results/` - per-run artifacts (gitignored)
 - `run-all.sh` - orchestrator: local then remote, then writes SUMMARY.md
 
@@ -44,7 +44,7 @@ Default ports and creds:
 | `LOCAL_PASSWORD` | `SmokeTestPass123!` |
 | `LOCAL_CONTAINER` | `minuspod-smoke` |
 | `LOCAL_VOLUME` | `minuspod-smoke-data` |
-| `REMOTE_BASE` | `https://podsrv.ttlequals0.com` |
+| `REMOTE_BASE` | `https://your-server.example.com` |
 | `REMOTE_COOKIES` | `./cookies.txt` |
 
 ## Test matrix

@@ -273,7 +273,12 @@ if not os.environ.get('OPENAI_API_KEY') and os.environ.get('ANTHROPIC_API_KEY'):
 # what keeps concurrent first-boot races from minting two different
 # keys. Without it, a stray second winner invalidates sessions held by
 # the first winner's cookies.
-_SECRET_KEY_LOCKFILE = Path(os.environ.get('DATA_PATH', '/app/data')) / '.secret_key.lock'
+_SECRET_KEY_LOCKFILE = Path(
+    os.environ.get('DATA_DIR')
+    or os.environ.get('DATA_PATH')
+    or os.environ.get('MINUSPOD_DATA_DIR')
+    or '/app/data'
+) / '.secret_key.lock'
 
 
 def get_or_create_secret_key():
