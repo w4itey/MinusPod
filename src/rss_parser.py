@@ -16,6 +16,31 @@ from utils.time import parse_iso_datetime
 from utils.url import validate_url, SSRFError
 from utils.safe_http import URLTrust, safe_get
 
+
+_FEED_CONTENT_TYPES = frozenset({
+    'application/rss+xml',
+    'application/atom+xml',
+    'application/xml',
+    'text/xml',
+    'application/octet-stream',  # common fallback from static hosts
+})
+
+
+def _content_type_looks_like_feed(header_value: str | None) -> bool:
+    """Accept anything that plausibly carries RSS / Atom bytes.
+
+    Missing header is permissive because many legacy RSS hosts send no
+    Content-Type at all; explicit HTML or binary types are rejected so a
+    compromised aggregator cannot feed us arbitrary bytes and hope
+    feedparser does something interesting with them.
+    """
+    if not header_value:
+        return True
+    main_type = header_value.split(';', 1)[0].strip().lower()
+    if not main_type:
+        return True
+    return main_type in _FEED_CONTENT_TYPES
+
 logger = logging.getLogger(__name__)
 
 # Per-host circuit breakers for upstream RSS feed fetching.
@@ -55,6 +80,13 @@ class RSSParser:
                 max_redirects=5,
             )
             response.raise_for_status()
+            if not _content_type_looks_like_feed(response.headers.get('Content-Type')):
+                logger.warning(
+                    "RSS fetch rejected on content-type: url=%s content_type=%r",
+                    url, response.headers.get('Content-Type'),
+                )
+                _get_rss_circuit_breaker(url).record_failure()
+                return None
             logger.info(f"Successfully fetched RSS feed, size: {len(response.content)} bytes")
             _get_rss_circuit_breaker(url).record_success()
             return response.text
