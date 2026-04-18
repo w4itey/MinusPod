@@ -213,15 +213,23 @@ Access the web UI at `http://localhost:8000/ui/` to add and manage feeds.
 
 ## Upgrading to 2.0.0+
 
-The 2.0.0 release is a security hardening milestone. Full detail in `CHANGELOG.md`; the bits that actually affect a deploy:
+2.0.0 is a security hardening release. A `docker pull && restart` on a 1.x data volume boots without config changes, but several defaults tightened so a few setups need env-var tweaks. Full detail in `CHANGELOG.md`.
 
-- `SESSION_COOKIE_SECURE` defaults to `true`. Plain-HTTP setups must set `SESSION_COOKIE_SECURE=false`.
-- `SESSION_COOKIE_SAMESITE` defaults to `Strict`. Override to `Lax` only if an integration breaks.
-- `flask-cors` is gone. Frontend and API must share an origin; put them behind the same reverse proxy.
-- Every mutating `/api/v1/*` request needs an `X-CSRF-Token` header matching the `minuspod_csrf` cookie. The frontend does this automatically; custom API clients have to echo the cookie value.
-- Login lockout: 5 fails from the same public IP in 15 min locks that IP for 15 min. **Behind Cloudflare, cloudflared, nginx, Traefik, or any reverse proxy, set `MINUSPOD_TRUSTED_PROXY_COUNT=1`** (higher for a multi-proxy chain). Without it the container sees the proxy hop, not the client: lockout and per-IP rate limits never fire, and audit logs / webhook payloads carry the proxy IP instead of the attacker. See `Remote Access / Security > Client IP for login lockout` for the full impact.
-- The `OPENAI_API_KEY` -> `ANTHROPIC_API_KEY` fallback is removed. Set `OPENAI_API_KEY` explicitly for OpenAI-compatible providers; a startup WARN fires when the old shape is detected.
-- Container runs as UID 1000. First boot chowns the data volume; `APP_UID`/`APP_GID` override if the host volume needs a different owner.
+**Likely to bite you if you do nothing:**
+
+- **Plain HTTP:** `SESSION_COOKIE_SECURE` now defaults to `true`, so browsers drop the session cookie. Login looks like it works then the next request is anonymous. Set `SESSION_COOKIE_SECURE=false` if you're not on HTTPS.
+- **Behind a reverse proxy (Cloudflare, cloudflared, nginx, Traefik):** set `MINUSPOD_TRUSTED_PROXY_COUNT=1`. Without it, login lockout and per-IP rate limits silently never fire -- the container sees the proxy hop instead of the client. A startup WARN flags it. Full impact in `Remote Access / Security > Client IP for login lockout`.
+- **External API clients** (cron scripts, homegrown tools, third-party integrations): every `POST` / `PUT` / `DELETE` on `/api/v1/*` now needs an `X-CSRF-Token` header matching the `minuspod_csrf` cookie. The built-in UI handles it; raw curl scripts have to echo the cookie.
+- **`/docs` and `/openapi.yaml` bookmarks / health checks:** moved to `/api/v1/docs` and `/api/v1/openapi.yaml`. The old paths return 404.
+- **OpenAI-compatible provider relying on the `ANTHROPIC_API_KEY` fallback:** that fallback is gone. Set `OPENAI_API_KEY` explicitly or ad detection 401s. A startup WARN fires when the old shape is detected.
+
+**Quieter changes worth knowing:**
+
+- `SESSION_COOKIE_SAMESITE` now `Strict`. Flip to `Lax` only if a specific cross-site integration breaks.
+- Frontend and API must share an origin (`flask-cors` was removed). Put them behind the same reverse proxy.
+- Password minimum is now 12 characters. Existing hashes verify fine; the next password change picks up the new minimum.
+- Saving provider keys via `PUT /api/v1/settings/ad-detection` returns 409 unless `MINUSPOD_MASTER_PASSPHRASE` is set. Existing plaintext keys keep working; the setting endpoint refuses to write a new secret in cleartext.
+- Container runs as UID 1000. First boot chowns the data volume in place. Override with `APP_UID` / `APP_GID` or bypass with `docker run --user <N>` if the host volume belongs to a different UID.
 
 ## Web Interface
 
