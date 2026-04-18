@@ -79,6 +79,14 @@ AUTH_EXEMPT_PATHS = frozenset({
     # this list was removed specifically because it was a footgun for
     # future auth endpoints.
     '/api/v1/auth/password',
+    # SSE: EventSource cannot surface an HTTP 401 to the JavaScript
+    # handler -- the browser silently reconnect-loops against the
+    # closed response. The generator in status.py snapshots auth at
+    # connect time and emits a single `event: auth-failed` SSE message,
+    # which GlobalStatusBar.tsx listens for and redirects to /ui/login.
+    # Exempt here so the generator runs at all; DO NOT generalise this
+    # to other endpoints.
+    '/api/v1/status/stream',
 })
 
 # Strict pattern exemption for podcast-app cross-origin artwork GETs.

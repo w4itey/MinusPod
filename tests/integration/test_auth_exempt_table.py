@@ -40,10 +40,55 @@ def client_with_password():
     db.set_setting('app_password', '')
 
 
-def test_status_stream_requires_auth(client_with_password):
-    """SSE was previously auth-exempt-by-prefix; now gated."""
-    response = client_with_password.get('/api/v1/status/stream')
-    assert response.status_code == 401
+def test_status_stream_unauth_gets_auth_failed_event(client_with_password):
+    """Unauthenticated SSE connect receives a single ``auth-failed``
+    event rather than a 401, so the browser-side handler can redirect
+    cleanly instead of reconnect-looping against a closed 401 response
+    that EventSource cannot introspect."""
+    response = client_with_password.get(
+        '/api/v1/status/stream',
+        buffered=True,
+    )
+    assert response.status_code == 200
+    assert response.mimetype == 'text/event-stream'
+    body = response.get_data(as_text=True)
+    assert 'event: auth-failed' in body
+
+
+def test_status_stream_authenticated_opens_stream(client_with_password):
+    """Authenticated SSE connect must open the real data stream and
+    never emit ``auth-failed``. Reads a bounded prefix then closes --
+    the authenticated stream is long-polled so ``buffered=True`` would
+    block forever."""
+    login = client_with_password.post(
+        '/api/v1/auth/login',
+        json={'password': 'pw'},
+    )
+    assert login.status_code == 200
+    response = client_with_password.get(
+        '/api/v1/status/stream',
+        buffered=False,
+    )
+    try:
+        assert response.status_code == 200
+        assert response.mimetype == 'text/event-stream'
+        # Accumulate chunks until we see a full SSE frame boundary or
+        # hit a bounded cap. The generator might emit a comment ping
+        # or split the first frame across yields, so a single next()
+        # is fragile.
+        buf = b""
+        for _ in range(8):
+            try:
+                buf += next(response.response)
+            except StopIteration:
+                break
+            if b"\n\n" in buf:
+                break
+        prefix = buf.decode('utf-8')
+        assert 'event: auth-failed' not in prefix
+        assert 'data: ' in prefix
+    finally:
+        response.close()
 
 
 def test_api_docs_requires_auth(client_with_password):

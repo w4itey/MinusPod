@@ -31,13 +31,15 @@ def status_stream():
     """
     Server-Sent Events stream for real-time processing status updates.
 
-    Returns a continuous event stream with status updates whenever
-    processing state changes.
-
-    The endpoint is listed in AUTH_EXEMPT_PREFIXES because EventSource
-    cannot surface a 401 status to the client; instead we emit an
-    application-level ``auth-failed`` event when the session lapses and
-    the browser-side handler in GlobalStatusBar.tsx redirects to /login.
+    Listed in AUTH_EXEMPT_PATHS because EventSource cannot surface an
+    HTTP 401 to the JavaScript handler -- the browser reconnect-loops
+    against the closed response with no signal about why. Auth is
+    snapshotted once at connect time below: an unauthenticated caller
+    receives a single ``event: auth-failed`` SSE message and the
+    stream closes. GlobalStatusBar.tsx listens for that event and
+    redirects to /ui/login. A session that lapses mid-stream is caught
+    on the client's next non-SSE API call, which apiRequest
+    401-redirects.
     """
     # Evaluate auth inside the request context before the generator
     # runs. The generator lives past request-end (SSE is long-polled),
