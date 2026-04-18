@@ -49,6 +49,17 @@ services:
       - BASE_URL=${BASE_URL:-http://localhost:8000}
       - RETENTION_PERIOD=${RETENTION_PERIOD:-1440}
 
+      # =================================================================
+      # Reverse proxy / tunnel (behind Cloudflare, nginx, Traefik, ...)
+      # =================================================================
+      # Number of trusted proxy hops in front of this container.
+      # 0 (default) = no proxy; the container sees the real client IP.
+      # 1 = one proxy (Cloudflare tunnel, nginx, Traefik, cloudflared).
+      # Set to 1 when the `tunnel` profile is active, or any time the
+      # container sits behind a reverse proxy, so login lockout keys
+      # on the real client IP rather than the proxy loopback.
+      - MINUSPOD_TRUSTED_PROXY_COUNT=${MINUSPOD_TRUSTED_PROXY_COUNT:-0}
+
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
       interval: 30s
