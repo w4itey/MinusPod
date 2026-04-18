@@ -480,10 +480,32 @@ paths:
       tags:
         - Feeds
       summary: Refresh a single feed
-      description: Fetch the latest RSS feed and update episode list
+      description: |
+        Fetch the latest RSS feed and update the episode list. By default
+        this sends a conditional GET -- if upstream returns 304 Not
+        Modified, the refresh is a no-op. Pass `{"force": true}` in the
+        body to bypass the stored ETag / Last-Modified headers and do a
+        full fetch, useful when an upstream CDN is falsely returning 304
+        against its own new content.
       operationId: refreshFeed
       parameters:
         - $ref: '#/components/parameters/slug'
+      requestBody:
+        required: false
+        description: Optional force-refresh flag. Omit for default conditional GET.
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                force:
+                  type: boolean
+                  description: |
+                    When true, clears the podcast's stored ETag +
+                    Last-Modified values before fetching so upstream
+                    cannot short-circuit with 304 Not Modified.
+                  default: false
+              additionalProperties: false
       responses:
         '200':
           description: Feed refreshed successfully
@@ -2154,24 +2176,39 @@ paths:
         - Status
       summary: Real-time status stream (SSE)
       description: |
-        Server-Sent Events endpoint for real-time processing status updates.
-        Connect to receive live updates about processing progress, including
-        stage changes and percentage completion.
+        Server-Sent Events stream of processing status updates.
+
+        Authentication is snapshotted once at connect time, not on the
+        HTTP handshake -- the endpoint is in `AUTH_EXEMPT_PATHS` because
+        browser `EventSource` clients cannot surface a 401 response.
+        An unauthenticated connect receives a single
+        `event: auth-failed` SSE frame and the stream closes; the
+        frontend handler redirects to `/ui/login` on that event. An
+        authenticated connect opens the real data stream.
+
+        A session that lapses mid-stream is caught on the client's next
+        non-SSE API call, which 401-redirects normally.
       operationId: streamStatus
       responses:
         '200':
-          description: SSE stream of status updates
+          description: |
+            SSE stream. Body is either a sequence of `data:` frames
+            (authenticated) or a single `event: auth-failed` frame
+            followed by stream close (unauthenticated).
           content:
             text/event-stream:
               schema:
                 type: string
                 description: |
-                  SSE events with JSON data containing:
+                  Authenticated stream: `data:` frames with JSON payload:
                   - processing: boolean
                   - episode: object with title, slug, episodeId
                   - stage: current processing stage
                   - progress: percentage (0-100)
                   - queue_depth: number of pending episodes
+
+                  Unauthenticated stream: single frame
+                  `event: auth-failed\ndata: {}\n\n` then close.
 
   /history:
     get:
@@ -2957,6 +2994,80 @@ paths:
                     type: string
                   durationMs:
                     type: integer
+
+  /docs:
+    get:
+      tags:
+        - System
+      summary: Swagger UI
+      description: |
+        Renders this OpenAPI spec in an interactive Swagger UI. Assets
+        are bundled in the image under `/ui/swagger/*` -- no CDN
+        dependency, air-gap friendly. Auth-gated; an unauthenticated
+        GET returns 401 (the blueprint-level `check_auth` runs first).
+      operationId: swaggerUi
+      responses:
+        '200':
+          description: HTML page with Swagger UI
+          content:
+            text/html:
+              schema:
+                type: string
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /docs/:
+    get:
+      tags:
+        - System
+      summary: Swagger UI (trailing-slash alias)
+      description: Same content as `/docs`; exists so browsers don't
+        get a Werkzeug redirect on the trailing slash variant.
+      operationId: swaggerUiSlash
+      responses:
+        '200':
+          description: HTML page with Swagger UI
+          content:
+            text/html:
+              schema:
+                type: string
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /openapi.yaml:
+    get:
+      tags:
+        - System
+      summary: OpenAPI spec
+      description: |
+        Returns this spec file. Auth-gated. Note that the spec
+        describes endpoints relative to `/api/v1`; this handler
+        serves the spec at `/api/v1/openapi.yaml`.
+      operationId: openapiSpec
+      responses:
+        '200':
+          description: OpenAPI YAML document
+          content:
+            application/yaml:
+              schema:
+                type: string
+            text/yaml:
+              schema:
+                type: string
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /system/backup:
     get:
