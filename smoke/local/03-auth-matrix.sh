@@ -22,8 +22,11 @@ done
 # must return 200 text/event-stream with a single `auth-failed` event
 # that GlobalStatusBar.tsx redirects on. Bounded read so the smoke
 # run doesn't hang on the long-poll. max-time covers cold-start.
-sse_body=$(curl -sS --max-time 5 "$LOCAL_BASE/api/v1/status/stream" 2>/dev/null)
-sse_rc=$?
+# `|| rc=$?` keeps set -e from killing the script on curl's expected
+# timeout exit (28) or a real connection error -- we branch on rc
+# below instead.
+sse_rc=0
+sse_body=$(curl -sS --max-time 5 "$LOCAL_BASE/api/v1/status/stream" 2>/dev/null) || sse_rc=$?
 if [ $sse_rc -ne 0 ] && [ $sse_rc -ne 28 ]; then
     fail_step "unauth /api/v1/status/stream curl failed (rc=$sse_rc)"
 else
