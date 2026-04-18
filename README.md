@@ -110,7 +110,7 @@ Ads are classified as:
 - **REVIEW** - Medium confidence, removed but flagged for review
 - **REJECT** - Too short/long, low confidence, or missing ad signals - kept in audio
 
-Rejected ads appear in a separate "Rejected Detections" section in the UI, allowing you to verify the validator's decisions.
+Rejected ads appear in a separate "Rejected Detections" section in the UI so you can verify the validator's decisions.
 
 ### Pattern Learning
 
@@ -131,7 +131,7 @@ When processing new episodes, the system first checks for known patterns before 
 **User Corrections:**
 In the ad editor, you can confirm, reject, or adjust detected ads:
 - **Confirm** - Creates/updates patterns in the database, incrementing confirmation count
-- **Adjust Boundaries** - Corrects start/end times for an ad; also creates patterns from adjusted boundaries (like confirm), ensuring accurate pattern text is learned
+- **Adjust Boundaries** - Corrects start/end times for an ad; also creates patterns from adjusted boundaries (like confirm), so the learned pattern text matches the corrected range
 - **Mark as Not Ad** - Flags as false positive and stores the transcript text. Similar text is automatically excluded in future episodes of the same podcast using TF-IDF similarity matching (cross-episode false positive learning)
 
 **Pattern Management:**
