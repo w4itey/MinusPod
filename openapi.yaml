@@ -636,7 +636,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /feeds/{slug}/episodes/{episodeId}:
+  /feeds/{slug}/episodes/{episode_id}:
     get:
       tags:
         - Episodes
@@ -645,7 +645,7 @@ paths:
       operationId: getEpisode
       parameters:
         - $ref: '#/components/parameters/slug'
-        - $ref: '#/components/parameters/episodeId'
+        - $ref: '#/components/parameters/episode_id'
       responses:
         '200':
           description: Episode details
@@ -656,7 +656,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /feeds/{slug}/episodes/{episodeId}/transcript:
+  /feeds/{slug}/episodes/{episode_id}/transcript:
     get:
       tags:
         - Episodes
@@ -665,7 +665,7 @@ paths:
       operationId: getEpisodeTranscript
       parameters:
         - $ref: '#/components/parameters/slug'
-        - $ref: '#/components/parameters/episodeId'
+        - $ref: '#/components/parameters/episode_id'
       responses:
         '200':
           description: Episode transcript
@@ -681,7 +681,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /feeds/{slug}/episodes/{episodeId}/original-transcript:
+  /feeds/{slug}/episodes/{episode_id}/original-transcript:
     get:
       tags:
         - Episodes
@@ -690,7 +690,7 @@ paths:
       operationId: getOriginalTranscript
       parameters:
         - $ref: '#/components/parameters/slug'
-        - $ref: '#/components/parameters/episodeId'
+        - $ref: '#/components/parameters/episode_id'
       responses:
         '200':
           description: Original transcript
@@ -706,7 +706,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /episodes/{slug}/{episodeId}/reprocess:
+  /episodes/{slug}/{episode_id}/reprocess:
     post:
       tags:
         - Episodes
@@ -721,7 +721,7 @@ paths:
       operationId: reprocessEpisode
       parameters:
         - $ref: '#/components/parameters/slug'
-        - $ref: '#/components/parameters/episodeId'
+        - $ref: '#/components/parameters/episode_id'
       requestBody:
         required: false
         content:
@@ -757,7 +757,7 @@ paths:
         '500':
           $ref: '#/components/responses/ServerError'
 
-  /feeds/{slug}/episodes/{episodeId}/regenerate-chapters:
+  /feeds/{slug}/episodes/{episode_id}/regenerate-chapters:
     post:
       tags:
         - Episodes
@@ -769,7 +769,7 @@ paths:
       operationId: regenerateChapters
       parameters:
         - $ref: '#/components/parameters/slug'
-        - $ref: '#/components/parameters/episodeId'
+        - $ref: '#/components/parameters/episode_id'
       responses:
         '200':
           description: Chapters regenerated successfully
@@ -876,7 +876,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /feeds/{slug}/episodes/{episodeId}/retry-ad-detection:
+  /feeds/{slug}/episodes/{episode_id}/retry-ad-detection:
     post:
       tags:
         - Episodes
@@ -888,7 +888,7 @@ paths:
       operationId: retryAdDetection
       parameters:
         - $ref: '#/components/parameters/slug'
-        - $ref: '#/components/parameters/episodeId'
+        - $ref: '#/components/parameters/episode_id'
       responses:
         '200':
           description: Ad detection retry completed
@@ -914,18 +914,18 @@ paths:
         '500':
           $ref: '#/components/responses/ServerError'
 
-  /feeds/{slug}/episodes/{episodeId}/reprocess:
+  /feeds/{slug}/episodes/{episode_id}/reprocess:
     post:
       tags:
         - Processing
       summary: Force reprocess an episode (legacy)
       description: |
-        Legacy reprocess endpoint. Prefer `/episodes/{slug}/{episodeId}/reprocess`,
+        Legacy reprocess endpoint. Prefer `/episodes/{slug}/{episode_id}/reprocess`,
         which supports `mode=reprocess` and `mode=full`.
       operationId: reprocessEpisodeLegacy
       parameters:
         - $ref: '#/components/parameters/slug'
-        - $ref: '#/components/parameters/episodeId'
+        - $ref: '#/components/parameters/episode_id'
       responses:
         '200':
           description: Episode reprocess queued
@@ -949,7 +949,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /feeds/{slug}/episodes/{episodeId}/original.mp3:
+  /feeds/{slug}/episodes/{episode_id}/original.mp3:
     get:
       tags:
         - Episodes
@@ -963,7 +963,7 @@ paths:
       operationId: serveOriginalAudio
       parameters:
         - $ref: '#/components/parameters/slug'
-        - $ref: '#/components/parameters/episodeId'
+        - $ref: '#/components/parameters/episode_id'
       responses:
         '200':
           description: Original audio stream
@@ -975,7 +975,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /feeds/{slug}/episodes/{episodeId}/cancel:
+  /feeds/{slug}/episodes/{episode_id}/cancel:
     post:
       tags:
         - Processing
@@ -986,7 +986,7 @@ paths:
       operationId: cancelEpisodeProcessing
       parameters:
         - $ref: '#/components/parameters/slug'
-        - $ref: '#/components/parameters/episodeId'
+        - $ref: '#/components/parameters/episode_id'
       responses:
         '200':
           description: Episode processing canceled
@@ -1010,7 +1010,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /episodes/{slug}/{episodeId}/corrections:
+  /episodes/{slug}/{episode_id}/corrections:
     post:
       tags:
         - Episodes
@@ -1029,7 +1029,7 @@ paths:
       operationId: submitCorrections
       parameters:
         - $ref: '#/components/parameters/slug'
-        - $ref: '#/components/parameters/episodeId'
+        - $ref: '#/components/parameters/episode_id'
       requestBody:
         required: true
         content:
@@ -1238,7 +1238,7 @@ paths:
                     items:
                       $ref: '#/components/schemas/Pattern'
 
-  /patterns/{patternId}:
+  /patterns/{pattern_id}:
     get:
       tags:
         - Patterns
@@ -1246,7 +1246,7 @@ paths:
       description: Returns details for a specific ad pattern
       operationId: getPattern
       parameters:
-        - $ref: '#/components/parameters/patternId'
+        - $ref: '#/components/parameters/pattern_id'
       responses:
         '200':
           description: Pattern details
@@ -1263,7 +1263,7 @@ paths:
       description: Update pattern properties like active status, sponsor, or disabled reason
       operationId: updatePattern
       parameters:
-        - $ref: '#/components/parameters/patternId'
+        - $ref: '#/components/parameters/pattern_id'
       requestBody:
         required: true
         content:
@@ -1303,7 +1303,7 @@ paths:
       description: Permanently delete an ad pattern from the database
       operationId: deletePattern
       parameters:
-        - $ref: '#/components/parameters/patternId'
+        - $ref: '#/components/parameters/pattern_id'
       responses:
         '200':
           description: Pattern deleted successfully
@@ -1615,7 +1615,7 @@ paths:
                         scope:
                           type: string
 
-  /patterns/{patternId}/split:
+  /patterns/{pattern_id}/split:
     post:
       tags:
         - Patterns
@@ -1626,7 +1626,7 @@ paths:
         are created for each detected sponsor segment.
       operationId: splitPattern
       parameters:
-        - name: patternId
+        - name: pattern_id
           in: path
           required: true
           schema:
@@ -1945,7 +1945,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /sponsors/{sponsorId}:
+  /sponsors/{sponsor_id}:
     get:
       tags:
         - Sponsors
@@ -1953,7 +1953,7 @@ paths:
       description: Returns details for a specific sponsor by ID
       operationId: getSponsor
       parameters:
-        - $ref: '#/components/parameters/sponsorId'
+        - $ref: '#/components/parameters/sponsor_id'
       responses:
         '200':
           description: Sponsor details
@@ -1970,7 +1970,7 @@ paths:
       description: Update sponsor properties like name, aliases, or category
       operationId: updateSponsor
       parameters:
-        - $ref: '#/components/parameters/sponsorId'
+        - $ref: '#/components/parameters/sponsor_id'
       requestBody:
         required: true
         content:
@@ -2007,7 +2007,7 @@ paths:
       description: Deactivate a sponsor (soft delete)
       operationId: deleteSponsor
       parameters:
-        - $ref: '#/components/parameters/sponsorId'
+        - $ref: '#/components/parameters/sponsor_id'
       responses:
         '200':
           description: Sponsor deleted
@@ -2095,7 +2095,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /sponsors/normalizations/{normId}:
+  /sponsors/normalizations/{norm_id}:
     put:
       tags:
         - Sponsors
@@ -2103,7 +2103,7 @@ paths:
       description: Update an existing normalization rule's pattern, replacement, or category
       operationId: updateNormalization
       parameters:
-        - $ref: '#/components/parameters/normId'
+        - $ref: '#/components/parameters/norm_id'
       requestBody:
         required: true
         content:
@@ -2141,7 +2141,7 @@ paths:
       description: Deactivate a normalization rule (soft delete)
       operationId: deleteNormalization
       parameters:
-        - $ref: '#/components/parameters/normId'
+        - $ref: '#/components/parameters/norm_id'
       responses:
         '200':
           description: Normalization deleted
@@ -3327,7 +3327,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /settings/webhooks/{webhookId}:
+  /settings/webhooks/{webhook_id}:
     put:
       tags:
         - Settings
@@ -3335,7 +3335,7 @@ paths:
       description: Update an existing webhook configuration
       operationId: updateWebhook
       parameters:
-        - $ref: '#/components/parameters/webhookId'
+        - $ref: '#/components/parameters/webhook_id'
       requestBody:
         required: true
         content:
@@ -3375,7 +3375,7 @@ paths:
       description: Remove a webhook subscription
       operationId: deleteWebhook
       parameters:
-        - $ref: '#/components/parameters/webhookId'
+        - $ref: '#/components/parameters/webhook_id'
       responses:
         '200':
           description: Webhook deleted
@@ -3387,7 +3387,7 @@ paths:
                   message:
                     type: string
 
-  /settings/webhooks/{webhookId}/test:
+  /settings/webhooks/{webhook_id}/test:
     post:
       tags:
         - Settings
@@ -3396,7 +3396,7 @@ paths:
         Send a test event to a webhook endpoint to verify it is reachable and correctly configured. Rate limited to 10/min.
       operationId: testWebhook
       parameters:
-        - $ref: '#/components/parameters/webhookId'
+        - $ref: '#/components/parameters/webhook_id'
       responses:
         '200':
           description: Test result
@@ -3583,8 +3583,8 @@ components:
         type: string
         example: my-podcast
 
-    episodeId:
-      name: episodeId
+    episode_id:
+      name: episode_id
       in: path
       required: true
       description: Episode identifier (MD5 hash)
@@ -3592,8 +3592,8 @@ components:
         type: string
         example: abc123def456
 
-    patternId:
-      name: patternId
+    pattern_id:
+      name: pattern_id
       in: path
       required: true
       description: Pattern identifier (integer)
@@ -3601,8 +3601,8 @@ components:
         type: integer
         example: 42
 
-    sponsorId:
-      name: sponsorId
+    sponsor_id:
+      name: sponsor_id
       in: path
       required: true
       description: Sponsor identifier (integer)
@@ -3610,8 +3610,8 @@ components:
         type: integer
         example: 1
 
-    normId:
-      name: normId
+    norm_id:
+      name: norm_id
       in: path
       required: true
       description: Normalization rule identifier (integer)
@@ -3619,8 +3619,8 @@ components:
         type: integer
         example: 1
 
-    webhookId:
-      name: webhookId
+    webhook_id:
+      name: webhook_id
       in: path
       required: true
       description: Webhook identifier
