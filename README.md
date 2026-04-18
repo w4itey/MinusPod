@@ -1055,51 +1055,27 @@ Startup logs a WARN (`Running in a container without MINUSPOD_TRUSTED_PROXY_COUN
 
 ### Security Recommendations
 
-Settings the operator controls at deploy time:
+Operator checklist:
 
-- Serve over HTTPS with `SESSION_COOKIE_SECURE=true` (the default).
-- Set `MINUSPOD_TRUSTED_PROXY_COUNT=1` (or higher) behind a reverse proxy so lockout and rate limits see the real client IP.
-- Set `MINUSPOD_MASTER_PASSPHRASE` so provider API keys are encrypted at rest.
-- Set `MINUSPOD_ENABLE_HSTS=true` once the deployment is HTTPS-only.
-- Leave `SESSION_COOKIE_SAMESITE=Strict`; flip to `Lax` only if an integration needs it.
-- Block `/ui` and `/api` at the WAF (this covers `/api/v1/docs` and `/api/v1/openapi.yaml` too). Public feed paths stay reachable: `/<slug>`, `/episodes/<slug>/<episode>.mp3`, `/episodes/<slug>/<episode>.vtt`, `/episodes/<slug>/<episode>/chapters.json`, and `/api/v1/feeds/<slug>/artwork`.
+- Serve over HTTPS (`SESSION_COOKIE_SECURE=true` is the default).
+- `MINUSPOD_TRUSTED_PROXY_COUNT=1` if behind a reverse proxy.
+- `MINUSPOD_MASTER_PASSPHRASE` set so provider keys encrypt at rest.
+- `MINUSPOD_ENABLE_HSTS=true` once the deployment is HTTPS-only.
+- WAF block on `/ui` and `/api`. Public feed paths must stay reachable: `/<slug>`, `/episodes/<slug>/<episode>.mp3`, `.vtt`, `/chapters.json`, and `/api/v1/feeds/<slug>/artwork`.
 
-Shipped by default in 2.0.0+, no operator action needed:
+2.0.0+ ships the rest by default: CSRF, login lockout, SSRF guards, artwork magic-number validation, XXE defense, baseline security headers, non-root container, rate limits on destructive endpoints. See `CHANGELOG.md` for the full list.
 
-- Double-submit CSRF on every mutating `/api/v1/*` request.
-- Per-IP login lockout: 5 fails in 15 min -> 15 min block, public IPs only.
-- Path-traversal defense on slug and episode-id inputs.
-- Tier-aware SSRF fetcher on every outbound call; per-hop redirect revalidation; HTTPS -> HTTP downgrades refused.
-- Artwork magic-number validation and size cap.
-- Stdlib XML parsers reject DTDs, external entities, and entity bombs.
-- `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, and a scoped CSP on every response.
-- Container runs as UID 1000, not root. First boot chowns the data volume.
-- Rate limits on destructive endpoints: `POST /system/cleanup` 1/h, `DELETE /system/queue` 6/h, `GET /history/export` 5/h, each with a WARN audit log.
-
-**Cloudflare WAF Example**
-
-Create a custom rule to allow only Pocket Casts and block admin paths:
+**Cloudflare WAF example.** Allow only Pocket Casts on the feed host, block admin paths:
 
 ```
-Rule name: feed_only_allow_pocketcasts
-
-Expression:
 (http.request.full_uri wildcard r"http*://feed.example.com/*" and not http.user_agent wildcard "*Pocket*Casts*") or starts_with(http.request.uri.path, "/ui") or starts_with(http.request.uri.path, "/api")
-
-Action: Block
 ```
 
-This blocks:
-- Any request to your feed domain without "Pocket Casts" in the User-Agent
-- All requests under `/ui` and `/api` (this covers the admin UI, all REST endpoints, the interactive docs at `/api/v1/docs`, and the OpenAPI spec at `/api/v1/openapi.yaml`)
-
-Adjust the User-Agent pattern for your podcast app (e.g., `*Overcast*`, `*Castro*`, `*AntennaPod*`).
+Swap the User-Agent pattern for your app (`*Overcast*`, `*Castro*`, `*AntennaPod*`, ...).
 
 ### Rate limiting storage
 
-flask-limiter defaults to `memory://`, which means each gunicorn worker tracks its own counters. With `workers=2` (the default), every declared rate limit is effectively 2x in practice: the login limit of 10/hour can handle up to 20 attempts before the limiter refuses any more. That's still infeasible to brute-force, so most deployments leave the default alone. Operators who need exact declared limits or horizontal scaling should set `RATE_LIMIT_STORAGE_URI=redis://redis:6379` and add a Redis sidecar; a commented example lives in `docker-compose.yml`.
-
-The worker count itself is deliberate: two workers prevents the UI from freezing during bulk RSS refresh, because one worker can serve API traffic while the other is busy. If you reduce it to one worker, be aware that the 2x rate-limit math no longer applies and the UI will block during long background jobs.
+Rate limits are tracked per worker (memory-backed), so with the default two workers each declared limit is effectively doubled. For exact limits or multi-host scaling, set `RATE_LIMIT_STORAGE_URI=redis://redis:6379` and add a Redis sidecar. Don't drop below two workers -- the UI freezes during bulk RSS refresh with only one.
 
 ### Request correlation
 
@@ -1114,9 +1090,7 @@ All data is stored in the `./data` directory:
 
 ### Container user
 
-MinusPod runs as UID 1000 (`minuspod`) inside the container. The entrypoint starts as root so it can chown the data volume on first boot (`find ! -user $APP_UID`), then drops privileges with `gosu minuspod gunicorn`. Subsequent boots skip the chown because no files are unowned.
-
-If your host data volume belongs to a different UID, set `APP_UID` and `APP_GID` to match and restart. `docker run --user <N>` bypasses the chown/drop entirely and runs gunicorn as whatever UID the caller asked for.
+Runs as UID 1000 (`minuspod`). First boot chowns the data volume, then drops privileges via `gosu`. Override with `APP_UID` / `APP_GID` if your host volume belongs to a different UID, or bypass entirely with `docker run --user <N>`.
 
 ### Database backup sensitivity
 
