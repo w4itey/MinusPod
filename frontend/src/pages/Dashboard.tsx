@@ -36,8 +36,9 @@ function Dashboard() {
   });
 
   const refreshMutation = useMutation({
-    mutationFn: refreshFeed,
-    onMutate: (slug) => setRefreshingSlug(slug),
+    mutationFn: ({ slug, options }: { slug: string; options?: { force?: boolean } }) =>
+      refreshFeed(slug, options),
+    onMutate: ({ slug }) => setRefreshingSlug(slug),
     onSettled: () => {
       setRefreshingSlug(null);
       queryClient.invalidateQueries({ queryKey: ['feeds'] });
@@ -91,6 +92,10 @@ function Dashboard() {
       setDeleteConfirm(slug);
       setTimeout(() => setDeleteConfirm(null), 3000);
     }
+  };
+
+  const handleRefresh = (slug: string, options?: { force?: boolean }) => {
+    refreshMutation.mutate({ slug, options });
   };
 
   const sortedFeeds = useMemo(() => {
@@ -253,7 +258,7 @@ function Dashboard() {
             <FeedCard
               key={feed.slug}
               feed={feed}
-              onRefresh={(slug) => refreshMutation.mutate(slug)}
+              onRefresh={handleRefresh}
               onDelete={handleDelete}
               isRefreshing={refreshingSlug === feed.slug}
             />
@@ -265,7 +270,7 @@ function Dashboard() {
             <FeedListItem
               key={feed.slug}
               feed={feed}
-              onRefresh={(slug) => refreshMutation.mutate(slug)}
+              onRefresh={handleRefresh}
               onDelete={handleDelete}
               isRefreshing={refreshingSlug === feed.slug}
             />

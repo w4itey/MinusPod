@@ -26,9 +26,13 @@ export async function deleteFeed(slug: string): Promise<void> {
   await apiRequest(`/feeds/${slug}`, { method: 'DELETE' });
 }
 
-export async function refreshFeed(slug: string): Promise<{ message: string }> {
+export async function refreshFeed(
+  slug: string,
+  options?: { force?: boolean },
+): Promise<{ message: string }> {
   return apiRequest<{ message: string }>(`/feeds/${slug}/refresh`, {
     method: 'POST',
+    body: options?.force ? { force: true } : undefined,
   });
 }
 
