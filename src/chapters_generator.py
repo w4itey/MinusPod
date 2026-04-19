@@ -650,7 +650,7 @@ Example:
 Only include clear topic transitions, not minor tangents. Skip the very beginning since that's already a chapter.
 
 Transcript:
-{transcript[:8000]}"""
+{transcript}"""
 
         try:
             response = self._llm_client.messages_create(

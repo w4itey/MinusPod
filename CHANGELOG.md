@@ -6,6 +6,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] - 2026-04-19
+
+### Fixed
+- Chapter detection no longer truncates the transcript at 8,000 characters before sending it to the LLM. On long episodes (typically > 15 minutes) the model could only see the opening of the transcript, which caused manual chapter regeneration to return 1 or 2 chapters regardless of requested `num_splits`. Fix restores the intended number of boundaries for full-length episodes. Covers both the VTT regeneration path and the main-pipeline long-segment splitter.
+
+### Security
+- Redacted `userinfo` (embedded `user:password@`) from the debug log in `utils.url.validate_url` so credentials in configured outbound URLs cannot leak into container logs. Resolves CodeQL alert #42 (`py/clear-text-logging-sensitive-data`, high).
+
 ## [2.0.0] - 2026-04-17 (security audit)
 
 Coordinated security hardening pass across the auth surface, crypto, SSRF, path containment, artwork validation, rate limits, container privileges, and log hygiene. Several breaking changes; operators should read the Removed and Security sections before deploying. The full audit plan lives in `tmp/MinusPod_Audit_Remediation_Plan.md`.
