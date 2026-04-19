@@ -9,7 +9,6 @@ import socket
 from urllib.parse import urlparse
 
 from utils.constants import ALLOWED_URL_SCHEMES, ALLOWED_URL_PORTS
-from utils.http import safe_url_for_log
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +100,7 @@ def validate_url(url: str) -> str:
             raise SSRFError(f"Blocked reserved IP: {ip_str}")
 
     if logger.isEnabledFor(logging.DEBUG):
-        logger.debug("URL passed SSRF validation: %s", safe_url_for_log(url, keep_path=True))
+        logger.debug("URL passed SSRF validation: %s://%s", scheme, hostname)
     return url
 
 

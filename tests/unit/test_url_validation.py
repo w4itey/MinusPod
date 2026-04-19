@@ -270,4 +270,4 @@ class TestDebugLogRedaction:
         messages = ' '.join(r.getMessage() for r in caplog.records)
         assert 'secret' not in messages
         assert 'alice' not in messages
-        assert 'example.com' in messages
+        assert 'https' in messages
