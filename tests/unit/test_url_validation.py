@@ -256,10 +256,10 @@ class TestSnippetSanitization:
         assert result == snippet
 
 
-class TestDebugLogRedaction:
-    """Credentials embedded in URLs must not reach log output (CodeQL #42)."""
+class TestLogHygiene:
+    """URL credentials must never reach log output (CodeQL #42)."""
 
-    def test_validate_url_debug_log_redacts_userinfo(self, caplog):
+    def test_validate_url_does_not_log_userinfo(self, caplog):
         import logging
         with patch('utils.url.socket.getaddrinfo', return_value=[
             (socket.AF_INET, socket.SOCK_STREAM, 6, '', ('93.184.216.34', 443))
@@ -270,4 +270,3 @@ class TestDebugLogRedaction:
         messages = ' '.join(r.getMessage() for r in caplog.records)
         assert 'secret' not in messages
         assert 'alice' not in messages
-        assert 'https' in messages

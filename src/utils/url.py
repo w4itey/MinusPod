@@ -99,8 +99,6 @@ def validate_url(url: str) -> str:
         if addr.is_reserved:
             raise SSRFError(f"Blocked reserved IP: {ip_str}")
 
-    if logger.isEnabledFor(logging.DEBUG):
-        logger.debug("URL passed SSRF validation: %s://%s", scheme, hostname)
     return url
 
 
