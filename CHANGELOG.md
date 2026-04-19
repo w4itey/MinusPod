@@ -6,6 +6,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.2] - 2026-04-19
+
+### Changed
+- Pipeline and manual regenerate now produce the same chapters for the same episode. Both paths share a single `ChaptersGenerator.generate_chapters` that runs one full-transcript AI topic-boundary pass. The pipeline-only description-timestamp parsing, ad-gap seeding, per-segment splitting, and topic-matching stages have been removed; the RSS episode description is instead injected into the LLM prompt so the model can honor curated timestamp markers on its own. Eliminates an ~600-line divergence between the two code paths that caused the pipeline to return fewer chapters than a manual regenerate on the same episode.
+
+### Removed
+- Internal helpers no longer used: `parse_description_timestamps`, `detect_ad_gap_chapters`, `merge_chapters`, `split_long_segments`, `detect_topics_from_description`, `_match_topics_to_transcript`, `_get_transcript_summary`, `_reverse_adjust_timestamp`, `_html_to_text`, `format_chapters_json`, and the obsolete `generate_chapters_from_vtt` entry point.
+
 ## [2.0.1] - 2026-04-19
 
 ### Fixed
