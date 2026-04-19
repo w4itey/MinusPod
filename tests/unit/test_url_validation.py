@@ -254,3 +254,19 @@ class TestSnippetSanitization:
         snippet = 'just plain text with no html'
         result = nh3.clean(snippet, tags={"mark"}, attributes={})
         assert result == snippet
+
+
+class TestLogHygiene:
+    """URL credentials must never reach log output (CodeQL #42)."""
+
+    def test_validate_url_does_not_log_userinfo(self, caplog):
+        import logging
+        with patch('utils.url.socket.getaddrinfo', return_value=[
+            (socket.AF_INET, socket.SOCK_STREAM, 6, '', ('93.184.216.34', 443))
+        ]):
+            with caplog.at_level(logging.DEBUG, logger='utils.url'):
+                result = validate_url('https://alice:secret@example.com/feed.xml')
+        assert result == 'https://alice:secret@example.com/feed.xml'
+        messages = ' '.join(r.getMessage() for r in caplog.records)
+        assert 'secret' not in messages
+        assert 'alice' not in messages
