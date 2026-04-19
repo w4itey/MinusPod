@@ -72,12 +72,7 @@ def _parse_description_anchors(description: str) -> List[Tuple[str, str]]:
             if not title or len(title) < 2 or title.isdigit():
                 continue
             seen.setdefault(ts, title)
-
-    def _to_seconds(ts: str) -> int:
-        parts = [int(p) for p in ts.split(':')]
-        return parts[0] * 3600 + parts[1] * 60 + parts[2] if len(parts) == 3 \
-            else parts[0] * 60 + parts[1]
-    return sorted(seen.items(), key=lambda kv: _to_seconds(kv[0]))
+    return sorted(seen.items(), key=lambda kv: parse_timestamp(kv[0]))
 
 # Default model for chapter generation tasks (titles, topic detection, splitting).
 # Uses Haiku for cost efficiency -- these are simple classification/generation tasks.

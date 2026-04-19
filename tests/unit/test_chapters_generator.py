@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
 
-from chapters_generator import ChaptersGenerator
+from chapters_generator import ChaptersGenerator, _parse_description_anchors, TOPIC_DETECTION_TEMPERATURE
 
 
 @dataclass
@@ -253,7 +253,6 @@ class TestParseDescriptionAnchors:
     """Deterministic show-note timestamp extraction."""
 
     def test_extracts_plain_mmss_lines(self):
-        from chapters_generator import _parse_description_anchors
         desc = "00:00 Intro\n05:30 Main topic\n15:00 Guest interview"
         assert _parse_description_anchors(desc) == [
             ('00:00', 'Intro'),
@@ -262,21 +261,18 @@ class TestParseDescriptionAnchors:
         ]
 
     def test_extracts_bracketed_format(self):
-        from chapters_generator import _parse_description_anchors
         desc = "Show notes:\n[00:30] Welcome\n[12:45] Deep dive"
         result = dict(_parse_description_anchors(desc))
         assert result['00:30'] == 'Welcome'
         assert result['12:45'] == 'Deep dive'
 
     def test_extracts_parenthesized_format(self):
-        from chapters_generator import _parse_description_anchors
         desc = "(0:00) Intro\n(5:30) Topic A"
         result = dict(_parse_description_anchors(desc))
         assert result['0:00'] == 'Intro'
         assert result['5:30'] == 'Topic A'
 
     def test_strips_html_wrappers(self):
-        from chapters_generator import _parse_description_anchors
         desc = "<p>00:00 Intro</p><br/>05:30 Main<br>15:00 Guest"
         result = dict(_parse_description_anchors(desc))
         assert result['00:00'] == 'Intro'
@@ -284,24 +280,20 @@ class TestParseDescriptionAnchors:
         assert result['15:00'] == 'Guest'
 
     def test_empty_when_no_timestamps(self):
-        from chapters_generator import _parse_description_anchors
         desc = "Just a regular description with no timestamps."
         assert _parse_description_anchors(desc) == []
 
     def test_empty_for_none_or_blank(self):
-        from chapters_generator import _parse_description_anchors
         assert _parse_description_anchors(None) == []
         assert _parse_description_anchors('') == []
         assert _parse_description_anchors('   \n  ') == []
 
     def test_sorted_by_time(self):
-        from chapters_generator import _parse_description_anchors
         desc = "15:00 Late\n05:30 Mid\n00:00 Start"
         anchors = _parse_description_anchors(desc)
         assert [ts for ts, _ in anchors] == ['00:00', '05:30', '15:00']
 
     def test_drops_too_short_or_numeric_titles(self):
-        from chapters_generator import _parse_description_anchors
         desc = "00:00 A\n05:30 12345\n10:00 Real Title"
         result = dict(_parse_description_anchors(desc))
         assert '00:00' not in result  # title too short
@@ -347,7 +339,6 @@ class TestTopicDetectionTemperature:
     """Topic detection runs at the low TOPIC_DETECTION_TEMPERATURE constant."""
 
     def test_temperature_passed_to_llm(self):
-        from chapters_generator import TOPIC_DETECTION_TEMPERATURE
         assert TOPIC_DETECTION_TEMPERATURE == 0.1
 
         gen, stub = _make_generator_with_stub(canned_text='')
