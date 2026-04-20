@@ -6,6 +6,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.4] - 2026-04-20
+
+### Fixed
+- `POST /api/v1/feeds` now retries the title-extraction RSS fetch once after a 500 ms gap before giving up. Some hosts (Buzzsprout in particular) 403 the first request from a fresh client but serve the retry successfully, which previously caused the auto-slug branch to fall through to a URL-path fallback and commit junk slugs like `1411126` for "Maintenance Phase". After the retry, title-based slugs succeed end-to-end in the same create request.
+- When the title fetch still fails after the retry and the caller did not supply a `slug`, the endpoint now returns a `400` with "Could not fetch podcast title from RSS. Please provide a 'slug' in the request." The old URL-path fallback (which silently produced a numeric or otherwise misleading slug from paths like `rss.buzzsprout.com/1411126.rss`) is removed. Callers who want to control the slug explicitly can continue to pass `slug` in the request body; that path is unchanged.
+
 ## [2.0.3] - 2026-04-19
 
 ### Changed
