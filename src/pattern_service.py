@@ -20,6 +20,7 @@ from config import (
     SPONSOR_GLOBAL_THRESHOLD
 )
 from text_pattern_matcher import TextPatternMatcher
+from utils.constants import canonical_sponsor
 
 logger = logging.getLogger('podcast.patterns')
 
@@ -744,6 +745,8 @@ class PatternService:
             sponsor = ad.get('sponsor')
             if not sponsor or sponsor.lower() in ('unknown', 'n/a', ''):
                 continue
+
+            sponsor = canonical_sponsor(sponsor)
 
             try:
                 matched = False

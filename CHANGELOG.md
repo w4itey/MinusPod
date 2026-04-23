@@ -6,6 +6,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.12] - 2026-04-23
+
+DTNS 5253 reprocess on 2.0.11 caught the "Xero accounting" ad via verification but Whisper transcribed the sponsor as "Zero" this pass, so the auto-pattern-create path declined (short unknown sponsor, separate from any existing Xero pattern) and the miss was not learned. Fix: a small alias map that collapses known Whisper mishearings onto a canonical sponsor name before Gate B and pattern matching run.
+
+### Fixed
+
+- New `SPONSOR_ALIASES` map and `canonical_sponsor()` helper in `src/utils/constants.py`. Currently maps ``zero``/``xerox`` -> ``Xero``. `src/ad_detector.py:learn_from_detections` and `src/pattern_service.py:record_verification_misses` now normalize the detected sponsor through this helper before Gate A/B and the pattern-existence lookup. Effect: a verification miss reporting sponsor "Zero" now matches existing Xero patterns for a boost, and a new pattern (where the validator allows it) is stored under "Xero" instead of a parallel "Zero" entry.
+
 ## [2.0.11] - 2026-04-23
 
 Hotfix on 2.0.10: the reprocess detection in the new versioned-mp3 path used `processed_at` to decide first-process vs reprocess, but the reprocess state reset in `database.episodes` clears `processed_at` to NULL before `process_episode` runs. Result: `previously_processed` was always False, `new_version` stayed at 0, and the reprocess output overwrote `{episode_id}.mp3` in place - defeating the whole point of the versioned filename. Observed live on DTNS 5253 reprocess: `processedUrl` came back without the `-v1` suffix.

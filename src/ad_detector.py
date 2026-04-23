@@ -34,7 +34,7 @@ from utils.constants import (
     INVALID_SPONSOR_VALUES, STRUCTURAL_FIELDS,
     SPONSOR_PRIORITY_FIELDS, SPONSOR_PATTERN_KEYWORDS,
     INVALID_SPONSOR_CAPTURE_WORDS, NOT_AD_CLASSIFICATIONS,
-    KNOWN_SHORT_BRANDS,
+    KNOWN_SHORT_BRANDS, canonical_sponsor,
 )
 
 logger = logging.getLogger('podcast.claude')
@@ -2326,6 +2326,8 @@ class AdDetector:
 
             if not sponsor:
                 continue
+
+            sponsor = canonical_sponsor(sponsor)
 
             # Gate A: reject sponsors that are strict prefixes of known sponsors
             if self.sponsor_service:

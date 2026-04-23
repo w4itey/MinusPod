@@ -155,6 +155,22 @@ class TestRecordVerificationMissesAutoCreate:
                 for c in mock_logger.info.call_args_list
             )
 
+    def test_zero_alias_normalized_to_xero(self):
+        patterns = [{"id": 77, "sponsor": "Xero"}]
+        svc = _make_service(patterns)
+        fake_matcher = MagicMock()
+        svc._text_pattern_matcher = fake_matcher
+
+        svc.record_verification_misses(
+            "slug", "ep1",
+            [{"sponsor": "Zero", "start": 100, "end": 160}],
+            segments=[{"start": 0, "end": 200, "text": "..."}],
+        )
+        svc.record_pattern_match.assert_called_once_with(
+            77, episode_id="ep1", observed_duration=60,
+        )
+        fake_matcher.create_pattern_from_ad.assert_not_called()
+
     def test_matched_sponsor_boosts_not_auto_creates(self):
         patterns = [{"id": 42, "sponsor": "Acme"}]
         svc = _make_service(patterns)

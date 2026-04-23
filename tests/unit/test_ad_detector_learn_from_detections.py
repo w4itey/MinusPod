@@ -80,3 +80,11 @@ class TestGateBShortSponsor:
             [_ad("Ad Co")], _segments(), podcast_id="podA", episode_id="ep1"
         )
         detector._text_pattern_matcher.create_pattern_from_ad.assert_called_once()
+
+    def test_zero_alias_canonicalized_to_xero(self, detector):
+        detector.learn_from_detections(
+            [_ad("Zero")], _segments(), podcast_id="podA", episode_id="ep1"
+        )
+        call = detector._text_pattern_matcher.create_pattern_from_ad.call_args
+        assert call is not None
+        assert call.kwargs["sponsor"] == "Xero"
