@@ -233,19 +233,20 @@ class Storage:
     def cleanup_stale_audio_versions(self, slug: str, episode_id: str,
                                        current_version: int,
                                        extension: str = ".mp3") -> int:
-        """Remove audio files older than (current_version - 1).
+        """Remove every audio file except the current version.
 
-        Retains the version that just became current and the one before it
-        so in-flight client fetches from the previous RSS cycle still resolve.
+        Clients hitting the legacy unversioned URL still resolve via
+        ``serve_episode``, which reads ``processed_version`` from the DB and
+        falls through to the current file, so we can delete everything else
+        immediately on finalize. The retained ``{episode_id}-original`` file
+        is untouched (``iter_episode_audio_paths`` does not include it).
         Returns the number of files deleted.
         """
         if current_version <= 0:
             return 0
-        previous = self.get_episode_path(slug, episode_id, extension,
-                                          version=current_version - 1)
         current = self.get_episode_path(slug, episode_id, extension,
                                           version=current_version)
-        keep = {previous.resolve(), current.resolve()}
+        keep = {current.resolve()}
         removed = 0
         for path in self.iter_episode_audio_paths(slug, episode_id, extension):
             if path.resolve() in keep:

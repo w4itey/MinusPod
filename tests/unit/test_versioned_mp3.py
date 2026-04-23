@@ -62,34 +62,34 @@ class TestCleanupStaleAudioVersions:
         assert removed == 0
         assert storage.get_episode_path("pod", "abc123def456").exists()
 
-    def test_first_reprocess_keeps_unversioned_and_v1(self, storage):
+    def test_first_reprocess_drops_unversioned(self, storage):
         _make_episode_file(storage, "pod", "abc123def456")          # unversioned (v0)
         _make_episode_file(storage, "pod", "abc123def456", version=1)
         removed = storage.cleanup_stale_audio_versions("pod", "abc123def456", current_version=1)
-        assert removed == 0
-        assert storage.get_episode_path("pod", "abc123def456").exists()
+        assert removed == 1
+        assert not storage.get_episode_path("pod", "abc123def456").exists()
         assert storage.get_episode_path("pod", "abc123def456", version=1).exists()
 
-    def test_second_reprocess_drops_unversioned(self, storage):
+    def test_second_reprocess_drops_everything_prior(self, storage):
         _make_episode_file(storage, "pod", "abc123def456")
         _make_episode_file(storage, "pod", "abc123def456", version=1)
         _make_episode_file(storage, "pod", "abc123def456", version=2)
         removed = storage.cleanup_stale_audio_versions("pod", "abc123def456", current_version=2)
-        assert removed == 1
+        assert removed == 2
         assert not storage.get_episode_path("pod", "abc123def456").exists()
-        assert storage.get_episode_path("pod", "abc123def456", version=1).exists()
+        assert not storage.get_episode_path("pod", "abc123def456", version=1).exists()
         assert storage.get_episode_path("pod", "abc123def456", version=2).exists()
 
-    def test_third_reprocess_drops_everything_below_prior(self, storage):
+    def test_third_reprocess_keeps_only_current(self, storage):
         _make_episode_file(storage, "pod", "abc123def456")
         _make_episode_file(storage, "pod", "abc123def456", version=1)
         _make_episode_file(storage, "pod", "abc123def456", version=2)
         _make_episode_file(storage, "pod", "abc123def456", version=3)
         removed = storage.cleanup_stale_audio_versions("pod", "abc123def456", current_version=3)
-        assert removed == 2
+        assert removed == 3
         assert not storage.get_episode_path("pod", "abc123def456").exists()
         assert not storage.get_episode_path("pod", "abc123def456", version=1).exists()
-        assert storage.get_episode_path("pod", "abc123def456", version=2).exists()
+        assert not storage.get_episode_path("pod", "abc123def456", version=2).exists()
         assert storage.get_episode_path("pod", "abc123def456", version=3).exists()
 
 
