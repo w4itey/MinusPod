@@ -6,6 +6,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.14] - 2026-04-25
+
+Hot-fix on top of 2.0.13. The `seed_initial_data()` rewrite shipped in 2.0.13 ran on every Gunicorn worker at startup, and with two workers + 139 new SEED rows to insert per deploy the per-row INSERT batches raced on the SQLite write lock. The contention cascaded into `database is locked` errors on the `POST /api/v1/episodes/<slug>/<id>/reprocess` endpoint and the background RSS refresher within minutes of the deploy.
+
+### Fixed
+
+- `src/main_app/__init__.py` now calls `sponsor_service.seed_initial_data()` only inside the existing `if _try_become_background_leader():` block, alongside the other "leader only to avoid SQLite contention" tasks (RSS refresh thread, queue processor thread, initial RSS refresh). Non-leader workers skip the seed entirely; their `SponsorService` instances lazy-load via `_refresh_cache_if_needed()` once the leader has populated the DB. The seed is still idempotent and still propagates new `SEED_SPONSORS` entries on next restart, just from one worker instead of N. Direct evidence: production saw `sqlite3.OperationalError: database is locked` errors at 21:06-21:09 UTC on 2026-04-25 from the dual-worker race; rolling back to 2.0.12 cleared it. 2.0.13 has been retracted and `:latest` is back on 2.0.12 until 2.0.14 ships.
+
 ## [2.0.13] - 2026-04-25
 
 Two complementary expansions to the sponsor recognition layer: ~36 more `SPONSOR_ALIASES` entries covering brands cross-referenced with a 2024-2026 podcast-advertiser registry, and a 139-row growth of `SponsorService.SEED_SPONSORS` with a one-time conversion of `seed_initial_data()` from "first-run only" to idempotent name-diff so future SEED additions auto-propagate to existing deployments.
