@@ -319,5 +319,67 @@ class TestAdDetectorLLMClientNotCached(unittest.TestCase):
         self.assertIsNone(det._llm_client)
 
 
+
+class TestGetLlmClientConfigInvalidation(unittest.TestCase):
+    """Each gunicorn worker has its own ``_cached_client``. Only the worker
+    that handles a settings PUT runs ``force_new``. Sibling workers must
+    detect the config change at next call and rebuild themselves."""
+
+    def setUp(self):
+        import llm_client
+        llm_client._cached_client = None
+        llm_client._cached_client_config_key = None
+
+    def tearDown(self):
+        import llm_client
+        llm_client._cached_client = None
+        llm_client._cached_client_config_key = None
+
+    @patch('llm_client._record_token_usage')
+    @patch('llm_client.get_effective_openrouter_api_key', return_value='sk-or')
+    @patch('llm_client.get_effective_provider', return_value='openrouter')
+    def test_same_config_returns_cached_client(self, _prov, _key, _cb):
+        from llm_client import get_llm_client
+        first = get_llm_client()
+        second = get_llm_client()
+        self.assertIs(first, second)
+
+    @patch('llm_client._record_token_usage')
+    @patch('llm_client.get_effective_anthropic_api_key', return_value='sk-ant')
+    @patch('llm_client.get_effective_openrouter_api_key', return_value='sk-or')
+    def test_provider_change_forces_rebuild_without_force_new(
+        self, _or_key, _ant_key, _cb
+    ):
+        import llm_client
+        from llm_client import get_llm_client
+        with patch('llm_client.get_effective_provider', return_value='openrouter'):
+            first = get_llm_client()
+        with patch('llm_client.get_effective_provider', return_value='anthropic'):
+            second = get_llm_client()
+        self.assertIsNot(first, second)
+        self.assertEqual(llm_client._cached_client_config_key, 'anthropic')
+
+    @patch('llm_client._record_token_usage')
+    @patch('llm_client.get_effective_openai_api_key', return_value='sk-oai')
+    @patch('llm_client.get_effective_provider', return_value='openai-compatible')
+    def test_base_url_change_forces_rebuild_without_force_new(
+        self, _prov, _key, _cb
+    ):
+        import llm_client
+        from llm_client import get_llm_client
+        with patch('llm_client.get_effective_base_url', return_value='http://a/v1'):
+            first = get_llm_client()
+        with patch('llm_client.get_effective_base_url', return_value='http://b/v1'):
+            second = get_llm_client()
+        self.assertIsNot(first, second)
+        self.assertEqual(second.base_url, 'http://b/v1')
+        self.assertEqual(llm_client._cached_client_config_key, 'openai-compatible:http://b/v1')
+
+    @patch('llm_client.get_effective_provider', return_value='anthropic')
+    def test_anthropic_config_key_is_stable(self, _prov):
+        from llm_client import _current_config_key
+        self.assertEqual(_current_config_key(), 'anthropic')
+
+
 if __name__ == '__main__':
     unittest.main()

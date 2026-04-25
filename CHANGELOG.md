@@ -6,6 +6,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.16] - 2026-04-25
+
+Hot-fix on top of 2.0.15. The 2.0.15 fix removed the per-instance ``self._llm_client`` cache in ``AdDetector`` / ``ChaptersGenerator`` and routed every call through ``get_llm_client()``. That closed half the staleness bug. The other half is the **per-worker** cache in ``llm_client._cached_client``: gunicorn runs two workers, each with its own module-level cache, and only the worker that handles the settings PUT runs ``force_new`` to rebuild. The sibling worker keeps its old client and silently routes requests to the previous provider/base_url.
+
+Direct evidence: at 2026-04-25 23:27:09 the user switched provider from ``openrouter`` to ``openai-compatible`` (``http://192.168.5.35/v1``). Worker A handled the PUT and rebuilt. The reprocess at 23:27:27 landed in Worker B, whose cache was last set at 23:26:46 (during the parallel UI poll) to ``openrouter``. At 23:29:51 all six ad-detection windows POST'd ``claude-sonnet-4-6`` to ``https://openrouter.ai/api/v1/chat/completions`` (visible in Loki), got 400 ``"is not a valid model ID"`` from OpenRouter, and the run failed.
+
+### Fixed
+
+- ``src/llm_client.py`` ``get_llm_client()`` now compares the cached client's config to the current effective config on every call and rebuilds when they differ. New ``_current_config_key()`` returns a stable string of the effective ``provider`` plus ``base_url`` (and applies the same Ollama ``/v1`` normalization ``_build_client`` applies). The ``_cached_client_config_key`` module global is set when the cache is populated and compared on each subsequent call. Cost: one ``get_effective_provider()`` plus one ``get_effective_base_url()`` per call -- both go through the existing 5s settings cache, so the steady-state hot path is two ``dict`` lookups under the existing ``_provider_cache_lock``. After at most ``_PROVIDER_CACHE_TTL`` seconds, every worker sees the new config and rebuilds without IPC. The settings handler still calls ``force_new=True`` for an immediate rebuild on the worker that handled the PUT.
+
+### Added
+
+- 4 tests in ``tests/unit/test_llm_client_openrouter.py`` ``TestGetLlmClientConfigInvalidation``: same config returns cached, provider change forces rebuild, base_url change forces rebuild, Anthropic config key is stable. Plus the existing 2.0.15 tests still pass (807 total, was 803).
+
 ## [2.0.15] - 2026-04-25
 
 Two related fixes to LLM-client behavior that surfaced together while running an OpenRouter-free-model test on 2.0.14: a stale per-instance client cache that ignored provider switches, and a rate-limit retry loop that ignored the server's `Retry-After` hint and then tripped the circuit breaker on throttling.
