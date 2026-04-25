@@ -36,6 +36,7 @@ KNOWN_SHORT_BRANDS = frozenset({
     'xero', 'venmo', 'kayak', 'meter', 'pura', 'opal', 'waymo', 'plaid',
     'deel', 'ramp', 'brex', 'lyft', 'uber', 'slack', 'zoom', 'asana',
     'figma', 'canva', 'miro', 'hinge', 'tonal', 'whoop',
+    'noom', 'ipsy', 'lume',
 })
 
 # Sponsor name aliases for common Whisper mishearings / spelling variants.
@@ -45,8 +46,204 @@ KNOWN_SHORT_BRANDS = frozenset({
 # the variants merge into one pattern family instead of splitting across
 # parallel misspelled entries.
 SPONSOR_ALIASES = {
+    # Xero
     'zero': 'Xero',
     'xerox': 'Xero',
+    # 1Password
+    '1 password': '1Password',
+    'one password': '1Password',
+    'one-password': '1Password',
+    # AG1 / Athletic Greens (SEED canonical is "Athletic Greens"; AG1 is an alias)
+    'ag one': 'Athletic Greens',
+    'ag 1': 'Athletic Greens',
+    'a g one': 'Athletic Greens',
+    'ag1': 'Athletic Greens',
+    'athletic greens one': 'Athletic Greens',
+    'athleticgreens': 'Athletic Greens',
+    # Athlean-X
+    'athlean x': 'Athlean-X',
+    'athlean-x': 'Athlean-X',
+    # BetMGM
+    'bet mgm': 'BetMGM',
+    'bet-mgm': 'BetMGM',
+    # BetterHelp
+    'better help': 'BetterHelp',
+    'better-help': 'BetterHelp',
+    # Birchbox
+    'birch box': 'Birchbox',
+    'birch-box': 'Birchbox',
+    # Bitwarden
+    'bit warden': 'Bitwarden',
+    'bit-warden': 'Bitwarden',
+    # Blue Apron
+    'blueapron': 'Blue Apron',
+    # Butcher Box (SEED canonical is two-word form)
+    'butcher box': 'Butcher Box',
+    'butcher-box': 'Butcher Box',
+    'butcherbox': 'Butcher Box',
+    # CarMax
+    'car max': 'CarMax',
+    'car-max': 'CarMax',
+    # Credit Karma
+    'creditkarma': 'Credit Karma',
+    # DeleteMe
+    'delete me': 'DeleteMe',
+    'delete-me': 'DeleteMe',
+    # Dollar Shave Club
+    'dollarshaveclub': 'Dollar Shave Club',
+    # DoorDash
+    'door dash': 'DoorDash',
+    'door-dash': 'DoorDash',
+    # DraftKings
+    'draft kings': 'DraftKings',
+    'draft-kings': 'DraftKings',
+    # EveryPlate
+    'every plate': 'EveryPlate',
+    'every-plate': 'EveryPlate',
+    # ExpressVPN
+    'express vpn': 'ExpressVPN',
+    'express-vpn': 'ExpressVPN',
+    # FabFitFun
+    'fab fit fun': 'FabFitFun',
+    'fab-fit-fun': 'FabFitFun',
+    # FanDuel
+    'fan duel': 'FanDuel',
+    'fan-duel': 'FanDuel',
+    # Gametime (SEED canonical)
+    'game time': 'Gametime',
+    'game-time': 'Gametime',
+    'gametime': 'Gametime',
+    # Gopuff
+    'go puff': 'Gopuff',
+    'go-puff': 'Gopuff',
+    # GoodRx
+    'good rx': 'GoodRx',
+    'good-rx': 'GoodRx',
+    # Green Chef
+    'green chef': 'Green Chef',
+    'green-chef': 'Green Chef',
+    'greenchef': 'Green Chef',
+    # Grubhub
+    'grub hub': 'Grubhub',
+    'grub-hub': 'Grubhub',
+    # Harry's
+    'harrys': "Harry's",
+    # Headspace
+    'head space': 'Headspace',
+    'head-space': 'Headspace',
+    # HelloFresh
+    'hello fresh': 'HelloFresh',
+    'hello-fresh': 'HelloFresh',
+    # Hims / Hims & Hers
+    "him's": 'Hims',
+    'hims and hers': 'Hims & Hers',
+    'hims & hers': 'Hims & Hers',
+    # Honeylove (SEED canonical)
+    'honey love': 'Honeylove',
+    'honey-love': 'Honeylove',
+    'honeylove': 'Honeylove',
+    # HubSpot
+    'hub spot': 'HubSpot',
+    'hub-spot': 'HubSpot',
+    'hubs pot': 'HubSpot',
+    # Imperfect Foods
+    'imperfect foods': 'Imperfect Foods',
+    'imperfectfoods': 'Imperfect Foods',
+    # Instacart
+    'insta cart': 'Instacart',
+    'insta-cart': 'Instacart',
+    # LegalZoom
+    'legal zoom': 'LegalZoom',
+    'legal-zoom': 'LegalZoom',
+    'legalzoom': 'LegalZoom',
+    # Liquid IV (SEED canonical; "Liquid I.V." is the alias form)
+    'liquid iv': 'Liquid IV',
+    'liquid i v': 'Liquid IV',
+    'liquid i.v.': 'Liquid IV',
+    'liquidiv': 'Liquid IV',
+    # Magic Mind
+    'magic mind': 'Magic Mind',
+    'magicmind': 'Magic Mind',
+    # Magic Spoon
+    'magic spoon': 'Magic Spoon',
+    'magicspoon': 'Magic Spoon',
+    # MasterClass
+    'master class': 'MasterClass',
+    'master-class': 'MasterClass',
+    # Mint Mobile
+    'mint mobile': 'Mint Mobile',
+    'mint-mobile': 'Mint Mobile',
+    'mintmobile': 'Mint Mobile',
+    # Monarch Money
+    'monarch money': 'Monarch Money',
+    'monarch-money': 'Monarch Money',
+    'monarchmoney': 'Monarch Money',
+    # Myprotein
+    'my protein': 'Myprotein',
+    'myprotein': 'Myprotein',
+    # NetSuite
+    'net suite': 'NetSuite',
+    'net-suite': 'NetSuite',
+    # NordVPN
+    'nord vpn': 'NordVPN',
+    'nord-vpn': 'NordVPN',
+    # OneSkin
+    'one skin': 'OneSkin',
+    'one-skin': 'OneSkin',
+    # P90X
+    'p ninety x': 'P90X',
+    # PolicyGenius
+    'policy genius': 'PolicyGenius',
+    'policy-genius': 'PolicyGenius',
+    # Raycon
+    'ray con': 'Raycon',
+    'ray-con': 'Raycon',
+    # Rocket Lawyer / Money / Mortgage
+    'rocketlawyer': 'Rocket Lawyer',
+    'rocket money': 'Rocket Money',
+    'rocket-money': 'Rocket Money',
+    'rocketmoney': 'Rocket Money',
+    'rocketmortgage': 'Rocket Mortgage',
+    # Rogaine
+    'ro gain': 'Rogaine',
+    'ro-gaine': 'Rogaine',
+    # Shopify
+    'shop ify': 'Shopify',
+    'shop a fly': 'Shopify',
+    'shop fly': 'Shopify',
+    # SimpliSafe
+    'simpli safe': 'SimpliSafe',
+    'simpli-safe': 'SimpliSafe',
+    'simply safe': 'SimpliSafe',
+    # Squarespace
+    'square space': 'Squarespace',
+    'square-space': 'Squarespace',
+    # Stamps.com
+    'stamp dot com': 'Stamps.com',
+    # Stitch Fix
+    'stitch fix': 'Stitch Fix',
+    'stitch-fix': 'Stitch Fix',
+    'stitchfix': 'Stitch Fix',
+    # Thrive Market
+    'thrive market': 'Thrive Market',
+    'thrivemarket': 'Thrive Market',
+    # Transparent Labs
+    'transparent labs': 'Transparent Labs',
+    'transparentlabs': 'Transparent Labs',
+    # Uber Eats
+    'uber eats': 'Uber Eats',
+    'uber-eats': 'Uber Eats',
+    'ubereats': 'Uber Eats',
+    # Wealthfront
+    'wealth front': 'Wealthfront',
+    'wealth-front': 'Wealthfront',
+    # ZipRecruiter
+    'zip recruiter': 'ZipRecruiter',
+    'zip-recruiter': 'ZipRecruiter',
+    # ZocDoc
+    'zoc doc': 'ZocDoc',
+    'zoc-doc': 'ZocDoc',
+    'zock doc': 'ZocDoc',
 }
 
 
