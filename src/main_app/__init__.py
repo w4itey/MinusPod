@@ -620,12 +620,15 @@ def _startup():
     signal.signal(signal.SIGINT, graceful_shutdown)
     logger.info("Registered signal handlers for graceful shutdown")
 
-    # Seed sponsor and normalization data (only inserts if table is empty)
-    sponsor_service.seed_initial_data()
-    logger.info("Sponsor service initialized")
-
     # Only one worker should run background tasks to avoid SQLite contention
     if _try_become_background_leader():
+        # Seed sponsor and normalization data. The 2.0.13 rewrite made this
+        # idempotent (per-startup name-diff insert), so it must run on the
+        # leader only or the workers race on writes and trigger
+        # "database is locked" cascades on the reprocess endpoint.
+        sponsor_service.seed_initial_data()
+        logger.info("Sponsor service initialized (leader)")
+
         # Start background RSS refresh thread
         refresh_thread = threading.Thread(target=background_rss_refresh, daemon=True)
         refresh_thread.start()
