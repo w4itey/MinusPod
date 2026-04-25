@@ -29,6 +29,7 @@ from dataclasses import dataclass
 from typing import List, Dict, Optional, Any
 
 from utils.circuit_breaker import CircuitBreaker, CircuitBreakerOpen
+from utils.rate_limit import parse_retry_after
 from utils.http import safe_url_for_log
 
 from config import (
@@ -412,8 +413,10 @@ class AnthropicClient(LLMClient):
                 messages=messages,
                 timeout=timeout
             )
-        except Exception:
-            self._record_circuit_breaker(success=False)
+        except Exception as e:
+            # 429 is throttling, not a provider failure -- don't trip the breaker.
+            if not is_rate_limit_error(e):
+                self._record_circuit_breaker(success=False)
             raise
 
         self._record_circuit_breaker(success=True)
@@ -576,8 +579,9 @@ class OpenAICompatibleClient(LLMClient):
                 response = self._client.chat.completions.create(**kwargs)
             else:
                 response = self._call_with_token_param_fallback(model, kwargs, token_param)
-        except Exception:
-            self._record_circuit_breaker(success=False)
+        except Exception as e:
+            if not is_rate_limit_error(e):
+                self._record_circuit_breaker(success=False)
             raise
 
         self._record_circuit_breaker(success=True)
@@ -1167,3 +1171,20 @@ def is_rate_limit_error(error: Exception) -> bool:
     # Check error message for rate limit indicators
     error_str = str(error).lower()
     return 'rate' in error_str and ('limit' in error_str or '429' in error_str)
+
+
+def extract_retry_after(error: Exception, *, max_seconds: float = 300.0) -> Optional[float]:
+    """Pull a `Retry-After` value from a provider rate-limit exception.
+
+    Both the Anthropic and OpenAI SDKs attach the original ``httpx.Response``
+    to error instances as ``error.response``. We read the header off that
+    response and run it through ``parse_retry_after``. Returns ``None`` when
+    the header is absent or the response object isn't reachable, so callers
+    can fall through to their existing backoff curve.
+    """
+    response = getattr(error, 'response', None)
+    headers = getattr(response, 'headers', None) if response is not None else None
+    if headers is None:
+        return None
+    raw = headers.get('Retry-After') or headers.get('retry-after')
+    return parse_retry_after(raw, max_seconds=max_seconds)
