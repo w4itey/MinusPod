@@ -81,6 +81,7 @@ AD_VOCABULARY = (
 HALLUCINATION_PATTERNS = re.compile(
     r'^(thanks for watching|thank you for watching|please subscribe|'
     r'like and subscribe|see you next time|bye\.?|'
+    r'subtitles by the amara\.org community|'
     r'\[music\]|\[applause\]|\[laughter\]|\[silence\]|'
     r'\.+|\s*|you)$',
     re.IGNORECASE

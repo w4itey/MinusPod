@@ -6,6 +6,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.12] - 2026-04-24
+
+Coverage expansion of the sponsor-alias canonicalization layer introduced in 2.0.11, plus one additional Whisper hallucination filter. Pure data and regex changes; no logic changes.
+
+### Improved
+
+- `SPONSOR_ALIASES` (`src/utils/constants.py`) expanded from 2 entries to 138, sourced from a curated brand-name ASR error reference covering the top podcast advertisers. Compound-split variants (``hub spot``, ``hello fresh``, ``square space``, ``express vpn``, ``zip recruiter``, ``door dash``, ``draft kings``, ``fan duel``, ``head space``, ``master class``, etc.) and special-punctuation variants (``ag one``/``ag 1``/``ag1`` -> ``Athletic Greens``; ``one password``/``1 password`` -> ``1Password``; ``liquid iv``/``liquid i.v.`` -> ``Liquid IV``; ``hims and hers`` -> ``Hims & Hers``) now collapse onto canonical names before Gate A/B and pattern-existence lookup, so verification misses on common Whisper compound-splits no longer fragment patterns across multiple spellings. Canonical values mirror `SponsorService.SEED_SPONSORS` where a SEED entry exists for the brand (Athletic Greens, Butcher Box, Gametime, Honeylove, Liquid IV), so the LLM-output normalization path and the transcript-scanning path agree on a single name per brand. Entries grouped by sponsor family in source for readability. Risky homophones with common English words (``row`` -> ``Ro``, ``shipped`` -> ``Shipt``, ``loom`` -> ``Lume``) and ambiguous rebrand pairs (``factor 75`` -> ``Factor``) were intentionally excluded.
+- `KNOWN_SHORT_BRANDS` (`src/utils/constants.py`) gains `noom`, `ipsy`, `lume` so single-word sponsors under 6 chars from real podcast advertisers pass Gate B and become eligible for pattern creation.
+- `HALLUCINATION_PATTERNS` (`src/transcriber.py`) now drops `Subtitles by the Amara.org community`, a documented Whisper subtitle-data hallucination in the same class as the existing ``Thanks for watching``/``please subscribe``/``[silence]`` filters. Prevents a known subtitle-credit segment from leaking into ad detection on episodes where Whisper hallucinates from low-energy audio.
+
 ## [2.0.11] - 2026-04-23
 
 Two follow-up fixes on 2.0.10, re-tagged under 2.0.11 rather than a new version.
