@@ -99,7 +99,8 @@ def get_chapters_model() -> str:
     except Exception as e:
         logger.warning(f"Could not load chapters model from DB: {e}")
 
-    return CHAPTERS_MODEL
+    from llm_client import get_provider_default_model
+    return get_provider_default_model('chapters')
 
 
 class ChaptersGenerator:

@@ -295,15 +295,18 @@ def update_ad_detection_settings():
         # tags carrying into Ollama Cloud) survive the switch and fail at
         # request time with not_found_error. Reset to provider-aware defaults.
         try:
-            advertised = {m.id for m in client.list_models()}
-            for setting_key in ('claude_model', 'verification_model', 'chapters_model'):
-                current = db.get_setting(setting_key)
-                if current and current not in advertised:
-                    logger.info(
-                        "Resetting %s='%s' on provider change: not advertised by new provider",
-                        setting_key, current,
-                    )
-                    db.reset_setting(setting_key)
+            models_list = client.list_models()
+            if models_list:
+                advertised = {m.id for m in models_list}
+                fallback_model = models_list[0].id
+                for setting_key in ('claude_model', 'verification_model', 'chapters_model'):
+                    current = db.get_setting(setting_key)
+                    if current and current not in advertised:
+                        logger.info(
+                            "Resetting %s='%s' on provider change: not advertised by new provider",
+                            setting_key, current,
+                        )
+                        db.set_setting(setting_key, fallback_model, is_default=False)
         except Exception:
             logger.exception("Failed to prune stale model selections after provider change")
 

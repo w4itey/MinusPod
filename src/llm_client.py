@@ -1237,3 +1237,25 @@ def extract_retry_after(error: Exception, *, max_seconds: float = 300.0) -> Opti
         return None
     raw = headers.get('Retry-After') or headers.get('retry-after')
     return parse_retry_after(raw, max_seconds=max_seconds)
+
+
+def get_provider_default_model(task: str = 'ad_detection') -> str:
+    """Return a safe default model for the current provider."""
+    from config import DEFAULT_AD_DETECTION_MODEL, DEFAULT_CHAPTERS_MODEL
+    
+    default_anthropic = DEFAULT_AD_DETECTION_MODEL if task == 'ad_detection' else DEFAULT_CHAPTERS_MODEL
+    
+    provider = get_effective_provider()
+    if provider in (PROVIDER_ANTHROPIC, PROVIDER_OPENROUTER):
+        return default_anthropic
+        
+    # For Ollama / OpenAI-compatible, fetch the first available model
+    try:
+        client = get_llm_client()
+        models = client.list_models()
+        if models:
+            return models[0].id
+    except Exception:
+        pass
+        
+    return default_anthropic

@@ -83,8 +83,8 @@ class SettingsMixin:
         provider = get_effective_provider()
         if provider != PROVIDER_ANTHROPIC:
             env_model = os.environ.get('OPENAI_MODEL')
-            model_default = env_model or DEFAULT_MODEL
-            chapters_default = env_model or CHAPTERS_MODEL
+            model_default = env_model or ""
+            chapters_default = env_model or ""
         else:
             model_default = DEFAULT_MODEL
             chapters_default = CHAPTERS_MODEL

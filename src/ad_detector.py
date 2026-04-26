@@ -1190,7 +1190,8 @@ class AdDetector:
                 return model
         except Exception as e:
             logger.warning(f"Could not load model from DB: {e}")
-        return DEFAULT_AD_DETECTION_MODEL
+        from llm_client import get_provider_default_model
+        return get_provider_default_model('ad_detection')
 
     def get_verification_model(self) -> str:
         """Get verification pass model from database or fall back to first pass model."""
