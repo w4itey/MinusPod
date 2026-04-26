@@ -280,12 +280,14 @@ function EpisodeDetail() {
           </div>
         </div>
 
-        {episode.status === 'completed' && (
+        {(episode.status === 'completed' || episode.logsAvailable) && (
           <div className="mt-4 pt-4 border-t border-border">
-            <audio controls className="w-full" src={`/episodes/${slug}/${episode.id}.mp3`}>
-              Your browser does not support the audio element.
-            </audio>
-            {(episode.transcriptVttAvailable || episode.chaptersAvailable) && (
+            {episode.status === 'completed' && (
+              <audio controls className="w-full" src={`/episodes/${slug}/${episode.id}.mp3`}>
+                Your browser does not support the audio element.
+              </audio>
+            )}
+            {(episode.transcriptVttAvailable || episode.chaptersAvailable || episode.logsAvailable) && (
               <div className="flex flex-wrap gap-2 mt-3">
                 {episode.transcriptVttAvailable && episode.transcriptVttUrl && (
                   <a
@@ -303,6 +305,15 @@ function EpisodeDetail() {
                     className="px-3 py-1 text-sm bg-purple-500/20 text-purple-600 dark:text-purple-400 rounded hover:bg-purple-500/30 transition-colors"
                   >
                     Download Chapters
+                  </a>
+                )}
+                {episode.logsAvailable && episode.logsUrl && (
+                  <a
+                    href={episode.logsUrl}
+                    download
+                    className="px-3 py-1 text-sm bg-orange-500/20 text-orange-600 dark:text-orange-400 rounded hover:bg-orange-500/30 transition-colors"
+                  >
+                    Download Logs
                   </a>
                 )}
               </div>

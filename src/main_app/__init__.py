@@ -102,6 +102,7 @@ def setup_logging():
     # Console handler only - Docker captures stdout for logging
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(formatter)
+    console_handler.setLevel(getattr(logging, log_level, logging.INFO))
     # Stamp every record with the current Flask request_id when available
     # so the JSON formatter's request_id field is always accurate inside
     # request handlers.
@@ -110,7 +111,7 @@ def setup_logging():
     # Configure root logger - clear existing handlers first to prevent duplicates
     root = logging.getLogger()
     root.handlers.clear()
-    root.setLevel(getattr(logging, log_level, logging.INFO))
+    root.setLevel(logging.DEBUG)
     root.addHandler(console_handler)
 
     # Set specific logger levels
@@ -121,7 +122,7 @@ def setup_logging():
     for name in ['podcast.api', 'podcast.feed', 'podcast.audio',
                  'podcast.transcribe', 'podcast.claude', 'podcast.refresh',
                  'podcast.llm_io']:
-        logging.getLogger(name).setLevel(getattr(logging, log_level, logging.INFO))
+        logging.getLogger(name).setLevel(logging.DEBUG)
 
 
 setup_logging()

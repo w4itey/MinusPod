@@ -835,6 +835,33 @@ def process_episode(slug: str, episode_id: str, episode_url: str,
     podcast_settings = db.get_podcast_by_slug(slug)
     podcast_description = podcast_settings.get('description') if podcast_settings else None
 
+    # --- Per-process detailed logging setup ---
+    import logging
+    import threading
+    root_logger = logging.getLogger()
+    
+    episode_handler = None
+    try:
+        log_dir = storage.get_podcast_dir(slug) / "episodes"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file_path = log_dir / f"{episode_id}.log"
+        
+        episode_handler = logging.FileHandler(log_file_path, mode='a')
+        episode_handler.setLevel(logging.DEBUG)
+        formatter = logging.Formatter('[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+        episode_handler.setFormatter(formatter)
+        
+        current_thread_id = threading.get_ident()
+        class ThreadFilter(logging.Filter):
+            def filter(self, record):
+                return threading.get_ident() == current_thread_id
+                
+        episode_handler.addFilter(ThreadFilter())
+        root_logger.addHandler(episode_handler)
+    except Exception as e:
+        audio_logger.error(f"[{slug}:{episode_id}] Failed to setup episode logger: {e}")
+    # ------------------------------------------
+
     try:
         audio_logger.info(f"[{slug}:{episode_id}] Starting: \"{episode_title}\"")
         mem_info = get_available_memory_gb()
@@ -983,3 +1010,7 @@ def process_episode(slug: str, episode_id: str, episode_url: str,
         _handle_processing_failure(slug, episode_id, episode_title, podcast_name,
                                     episode_data, e, start_time)
         return False
+    finally:
+        if episode_handler:
+            root_logger.removeHandler(episode_handler)
+            episode_handler.close()

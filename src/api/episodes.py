@@ -152,6 +152,15 @@ def get_episode(slug, episode_id):
     transcript_vtt_available = bool(episode.get('transcript_vtt'))
     chapters_available = bool(episode.get('chapters_json'))
 
+    # Check for process logs
+    logs_available = False
+    try:
+        podcast_dir = storage.get_podcast_dir(slug)
+        log_path = podcast_dir / "episodes" / f"{episode_id}.log"
+        logs_available = log_path.exists()
+    except Exception:
+        pass
+
     # Get corrections for this episode
     corrections = db.get_episode_corrections(episode_id)
 
@@ -188,6 +197,8 @@ def get_episode(slug, episode_id):
         'transcriptVttUrl': f"/episodes/{slug}/{episode_id}.vtt" if transcript_vtt_available else None,
         'chaptersAvailable': chapters_available,
         'chaptersUrl': f"/episodes/{slug}/{episode_id}/chapters.json" if chapters_available else None,
+        'logsAvailable': logs_available,
+        'logsUrl': f"/api/v1/feeds/{slug}/episodes/{episode_id}/logs" if logs_available else None,
         'error': episode.get('error_message'),
         'firstPassPrompt': episode.get('first_pass_prompt'),
         'firstPassResponse': episode.get('first_pass_response'),
@@ -252,6 +263,32 @@ def serve_original_audio(slug, episode_id):
     if not path.exists():
         return error_response('Original audio file missing', 404)
     return send_file(path, mimetype='audio/mpeg', conditional=True)
+
+
+@api.route('/feeds/<slug>/episodes/<episode_id>/logs', methods=['GET'])
+@log_request
+def download_episode_logs(slug, episode_id):
+    """Download the detailed process logs for an episode."""
+    if not is_valid_episode_id(episode_id):
+        abort(400)
+        
+    storage = get_storage()
+    try:
+        podcast_dir = storage.get_podcast_dir(slug)
+    except Exception:
+        abort(400)
+        
+    log_path = podcast_dir / "episodes" / f"{episode_id}.log"
+    
+    if not log_path.exists():
+        return error_response('Logs not found for this episode', 404)
+        
+    return send_file(
+        log_path,
+        mimetype='text/plain',
+        as_attachment=True,
+        download_name=f"{slug}_{episode_id}_process.log"
+    )
 
 
 @api.route('/feeds/<slug>/episodes/<episode_id>/reprocess', methods=['POST'])

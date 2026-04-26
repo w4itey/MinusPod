@@ -1183,15 +1183,34 @@ class AdDetector:
         return models_list
 
     def get_model(self) -> str:
-        """Get configured model from database or default."""
+        """Get configured model from database or default.
+
+        For Anthropic/OpenRouter providers a hardcoded default is used when
+        nothing is configured.  For all other providers (Ollama, OpenAI-compat)
+        an explicit model selection is required -- auto-picking models[0] is
+        dangerous because any newly-pulled model can silently become the active
+        one and fail if the server rejects it.
+        """
         try:
             model = self.db.get_setting('claude_model')
             if model:
                 return model
         except Exception as e:
             logger.warning(f"Could not load model from DB: {e}")
-        from llm_client import get_provider_default_model
-        return get_provider_default_model('ad_detection')
+
+        from llm_client import get_effective_provider
+        from config import PROVIDER_ANTHROPIC, PROVIDER_OPENROUTER, DEFAULT_AD_DETECTION_MODEL
+        provider = get_effective_provider()
+        if provider in (PROVIDER_ANTHROPIC, PROVIDER_OPENROUTER):
+            return DEFAULT_AD_DETECTION_MODEL
+
+        # Non-Anthropic providers must have an explicit model configured.
+        # Falling back to models[0] is risky: a newly-downloaded model can
+        # silently become active and cause 500 errors from the LLM server.
+        raise ValueError(
+            f"No model configured for provider '{provider}'. "
+            "Please go to Settings and select a model for ad detection."
+        )
 
     def get_verification_model(self) -> str:
         """Get verification pass model from database or fall back to first pass model."""

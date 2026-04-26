@@ -39,6 +39,8 @@ export interface EpisodeDetail extends Episode {
   transcriptVttUrl?: string;
   chaptersAvailable?: boolean;
   chaptersUrl?: string;
+  logsAvailable?: boolean;
+  logsUrl?: string;
   adMarkers?: AdSegment[];
   rejectedAdMarkers?: AdSegment[];
   corrections?: EpisodeCorrection[];

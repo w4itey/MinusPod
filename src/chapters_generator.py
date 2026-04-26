@@ -80,7 +80,14 @@ CHAPTERS_MODEL = _DEFAULT_CHAPTERS_MODEL
 
 
 def get_chapters_model() -> str:
-    """Get configured chapters model from database or fall back to default."""
+    """Get configured chapters model from database or fall back to default.
+
+    For Anthropic/OpenRouter a hardcoded default is used when nothing is
+    configured.  For all other providers (Ollama, OpenAI-compat) an explicit
+    model selection is required to avoid silently picking whatever model
+    happens to be first in the server's list.
+    """
+    from config import PROVIDER_OPENROUTER, DEFAULT_CHAPTERS_MODEL as _CHAPTERS_FALLBACK
     try:
         from database import Database
         db = Database()
@@ -89,18 +96,25 @@ def get_chapters_model() -> str:
         if model:
             return model
 
-        # Provider-aware fallback: use the primary detection model for non-Anthropic providers
-        # (Ollama doesn't have Anthropic model names like claude-haiku-4-5-20251001)
+        # For non-Anthropic providers fall through to the primary detection
+        # model before requiring explicit configuration, since many users
+        # configure only one model for both tasks.
         provider = get_effective_provider()
-        if provider != PROVIDER_ANTHROPIC:
+        if provider not in (PROVIDER_ANTHROPIC, PROVIDER_OPENROUTER):
             primary_model = db.get_setting('claude_model')
             if primary_model:
                 return primary_model
+            # No model configured at all for this provider.
+            raise ValueError(
+                f"No model configured for provider '{provider}'. "
+                "Please go to Settings and select a model for chapter generation."
+            )
+    except ValueError:
+        raise
     except Exception as e:
         logger.warning(f"Could not load chapters model from DB: {e}")
 
-    from llm_client import get_provider_default_model
-    return get_provider_default_model('chapters')
+    return _CHAPTERS_FALLBACK
 
 
 class ChaptersGenerator:
